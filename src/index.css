@@ -1,7 +1,15 @@
 @import "tailwindcss";
 
+/* 
+  קובץ CSS גלובלי (כללי) של הפרויקט.
+  Tailwind הוא כלי שנותן לנו "מחלקות עיצוב" מוכנות בתוך הקוד (className),
+  ועדיין אפשר להוסיף כאן הגדרות בסיסיות לכל האתר.
+*/
+
 :root {
+  /* פונט ברירת מחדל לכל האפליקציה */
   font-family: 'DM Sans', system-ui, sans-serif;
+  /* צבעי רקע וטקסט כלליים */
   background-color: #0f172a;
   color: #f8fafc;
 }
@@ -9,12 +17,14 @@
 body {
   margin: 0;
   min-height: 100vh;
+  /* אותו רקע גם ל-body כדי שלא יהיו "פסים" לבנים */
   background-color: #0f172a;
   color: #f8fafc;
 }
 
 #root {
   min-height: 100vh;
+  /* ה-root הוא הקונטיינר שבו React מצייר את כל האפליקציה */
   background-color: #0f172a;
   color: #f8fafc;
 }

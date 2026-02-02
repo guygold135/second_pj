@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import type { Task } from '../types'
 
+// נתוני דוגמה למשימות שמוצגות בדף הבית.
+// חשוב: בפרויקט הזה אין כרגע שרת/דאטה-בייס, אז הכל נשמר רק בזיכרון של הדפדפן.
 const initialTasks: Task[] = [
   {
     id: 'task-001',
@@ -56,6 +58,8 @@ const initialTasks: Task[] = [
   },
 ]
 
+// מיפוי "מצב צבע" -> איזו מחלקת CSS של Tailwind לתת למסגרת העליונה של הכרטיס.
+// הרעיון: לכל משימה יכול להיות צבע שמרמז על מצב/דחיפות.
 const statusBorder: Record<Task['statusColor'], string> = {
   'red-orange': 'border-t-orange-500',
   orange: 'border-t-amber-500',
@@ -63,6 +67,7 @@ const statusBorder: Record<Task['statusColor'], string> = {
   green: 'border-t-emerald-500',
 }
 
+// מיפוי "מצב צבע" -> איזה צבע למלא את פס ההתקדמות.
 const statusBarFill: Record<Task['statusColor'], string> = {
   'red-orange': 'bg-orange-500',
   orange: 'bg-amber-500',
@@ -70,6 +75,7 @@ const statusBarFill: Record<Task['statusColor'], string> = {
   green: 'bg-emerald-500',
 }
 
+// מצב התחלתי לטופס יצירת משימה חדשה (המודאל).
 const defaultFormState = {
   title: '',
   category: 'General',
@@ -77,19 +83,38 @@ const defaultFormState = {
   notes: '',
 }
 
+/**
+ * Home = דף הנחיתה (Landing Page) של האפליקציה.
+ *
+ * מה רואים פה?
+ * - אזור פתיחה "שיווקי" (Hero)
+ * - רשימת משימות לדוגמה + אפשרות להוסיף משימה (במודאל)
+ * - אזור פיצ'רים / המלצות / קריאה לפעולה / פוטר
+ *
+ * מבחינת לוגיקה: יש פה state מקומי שמחזיק את רשימת המשימות ואת הטופס.
+ */
 export default function Home() {
+  // tasks: הרשימה שמוצגת במסך (נמצאת בזיכרון של הדף)
   const [tasks, setTasks] = useState(initialTasks)
+  // formState: מה שהמשתמש כתב בשדות של הטופס
   const [formState, setFormState] = useState(defaultFormState)
+  // isFormOpen: האם להציג את חלון הוספת המשימה
   const [isFormOpen, setIsFormOpen] = useState(false)
 
+  // כששולחים את הטופס (לוחצים Add Task) אנחנו יוצרים משימה חדשה ומוסיפים אותה לרשימה.
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    // preventDefault מונע מהדפדפן לעשות "רענון דף" כמו בטופס HTML רגיל.
     event.preventDefault()
+    // אם המשתמש לא כתב כותרת אמיתית - לא נוסיף משימה.
     if (!formState.title.trim()) {
       return
     }
 
+    // "חותמת זמן" (Timestamp) כדי לדעת מתי נוצרה המשימה
     const now = new Date().toISOString()
+    // בניית אובייקט משימה חדש לפי המבנה שמוגדר ב-`src/types`
     const newTask: Task = {
+      // id ייחודי: אם הדפדפן תומך ב-crypto.randomUUID נשתמש בו, אחרת נייצר id פשוט.
       id: crypto.randomUUID?.() ?? `task-${Date.now()}`,
       title: formState.title.trim(),
       description: formState.notes.trim(),
@@ -104,14 +129,16 @@ export default function Home() {
       updatedAt: now,
     }
 
+    // מעדכנים את הרשימה: מוסיפים את המשימה החדשה בהתחלה
     setTasks((prev) => [newTask, ...prev])
+    // מאפסים את הטופס וסוגרים את החלון
     setFormState(defaultFormState)
     setIsFormOpen(false)
   }
 
   return (
     <div className="space-y-10 text-white">
-      {/* Hero */}
+      {/* HERO: אזור פתיחה גדול שמסביר "מה האפליקציה" */}
       <section className="relative overflow-hidden bg-gradient-to-b from-gray-900 to-gray-950 px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200')] bg-cover bg-center opacity-20 blur-sm" />
         <div className="relative mx-auto flex max-w-7xl flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
@@ -126,6 +153,7 @@ export default function Home() {
             <div className="flex flex-wrap gap-4">
             <button
               type="button"
+              // כפתור שפותח את חלון הוספת המשימה
               onClick={() => setIsFormOpen(true)}
               className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white hover:bg-blue-500"
             >
@@ -151,7 +179,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Tasks section */}
+      {/* משימות: כרטיסים שנבנים מתוך המערך `tasks` */}
       <section id="missions" className="border-t border-gray-800 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <h2 className="mb-2 text-center text-3xl font-bold sm:text-4xl">
@@ -161,6 +189,7 @@ export default function Home() {
             Effortlessly manage your projects, track progress, and collaborate seamlessly with your team.
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* הופכים כל משימה במערך לכרטיס על המסך */}
             {tasks.map((task) => (
               <div
                 key={task.id}
@@ -196,6 +225,7 @@ export default function Home() {
         </div>
       </section>
 
+        {/* אם isFormOpen=true, מציגים מודאל (חלון מעל המסך) ליצירת משימה */}
         {isFormOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
         <div className="w-full max-w-md rounded-2xl border border-gray-900 bg-slate-900/80 p-6 text-white shadow-xl backdrop-blur">
@@ -204,11 +234,13 @@ export default function Home() {
                 <button
                   type="button"
               className="text-gray-300 hover:text-white"
+                  // סגירת המודאל בלי לשמור
                   onClick={() => setIsFormOpen(false)}
                 >
                   ×
                 </button>
               </div>
+              {/* כשהטופס נשלח, handleSubmit יוצר משימה חדשה ומוסיף לרשימה */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <label className="block text-sm font-medium text-gray-600">
                   Task Name
@@ -251,6 +283,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => {
+                      // ביטול: סוגרים ומאפסים את השדות כדי להתחיל נקי בפעם הבאה
                       setIsFormOpen(false)
                       setFormState(defaultFormState)
                     }}
@@ -270,7 +303,7 @@ export default function Home() {
           </div>
         )}
 
-      {/* Features */}
+      {/* FEATURES: קטע "פיצ'רים" שיווקי (סטטי) */}
       <section id="features" className="bg-slate-900 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl space-y-6">
           <h2 className="text-center text-3xl font-bold text-white sm:text-4xl">
@@ -319,7 +352,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Testimonials */}
+      {/* TESTIMONIALS: המלצות (סטטי) */}
       <section className="border-t border-gray-800 bg-gray-950 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <h2 className="mb-2 text-center text-3xl font-bold text-white sm:text-4xl">
@@ -349,7 +382,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* CTA (Call To Action): טופס הרשמה דמו */}
       <section className="bg-slate-900 border-t border-gray-800 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-md space-y-4 text-center">
           <h2 className="text-3xl font-bold text-white sm:text-4xl">
@@ -372,7 +405,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
+      {/* FOOTER: תחתית האתר (סטטי) */}
       <footer className="border-t border-gray-800 bg-gray-950 px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
           <div>

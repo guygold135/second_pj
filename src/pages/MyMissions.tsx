@@ -1,8 +1,17 @@
 import { useMemo, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
+// כמה פעמים משימה חוזרת:
+// - none: חד-פעמי
+// - daily: כל יום
+// - weekly: כל שבוע
 type Recurrence = 'none' | 'daily' | 'weekly'
 
+/**
+ * Mission = "משימה חוזרת/משימה אישית" (במסך My Missions).
+ * זה דומה ל-Task, אבל פה יש גם רעיון של חזרה (daily/weekly)
+ * וגם "ספירה" (targetCount/progressCount) עד שמסמנים כבוצע.
+ */
 interface Mission {
   id: string
   title: string
@@ -14,6 +23,7 @@ interface Mission {
   isCompleted: boolean
 }
 
+// דוגמאות למשימות בתחילת הדרך (כדי שהמסך לא יהיה ריק).
 const initialMissions: Mission[] = [
   {
     id: uuidv4(),
@@ -35,17 +45,32 @@ const initialMissions: Mission[] = [
   },
 ]
 
+// אפשרויות שעות/דקות לבחירה, בשביל "Duration" (משך זמן).
 const hourOptions = Array.from({ length: 24 }, (_, idx) => String(idx).padStart(2, '0'))
 const minuteOptions = ['00', '15', '30', '45']
 
+/**
+ * MyMissions = מסך לניהול משימות אישיות/חוזרות.
+ *
+ * הלוגיקה המרכזית פה:
+ * - מוסיפים Mission חדש דרך שדות הקלט למעלה
+ * - מסמנים כ"בוצע": אם יש targetCount, כל קליק מעלה את progressCount עד שמגיעים ליעד
+ * - מוחקים Mission
+ *
+ * שים לב: הכל נשמר רק בזיכרון של הדף (state), אין שמירה קבועה.
+ */
 export default function MyMissions() {
+  // missions: הרשימה שמוצגת במסך
   const [missions, setMissions] = useState(initialMissions)
+  // שדות לטופס "הוספת משימה"
   const [newTitle, setNewTitle] = useState('')
   const [newRecurrence, setNewRecurrence] = useState<Recurrence>('none')
   const [hours, setHours] = useState('00')
   const [minutes, setMinutes] = useState('30')
   const [newTargetCount, setNewTargetCount] = useState(1)
 
+  // מיון: קודם מציגים משימות שלא הושלמו, ואז משימות שהושלמו.
+  // useMemo עוזר לא לחשב מחדש את הרשימה אם missions לא השתנה.
   const sortedMissions = useMemo(
     () => [
       ...missions.filter((mission) => !mission.isCompleted),
@@ -54,6 +79,7 @@ export default function MyMissions() {
     [missions],
   )
 
+  // הוספת משימה חדשה לרשימה
   const handleAdd = () => {
     if (!newTitle.trim()) return
     const target = newTargetCount >= 1 ? newTargetCount : 1
@@ -77,21 +103,31 @@ export default function MyMissions() {
     setNewTargetCount(1)
   }
 
+  // מחיקה לפי id
   const handleDelete = (id: string) => {
     setMissions((prev) => prev.filter((mission) => mission.id !== id))
   }
 
+  /**
+   * "סימון" משימה:
+   * - אם אין targetCount: לחיצה אחת מסיימת (isCompleted=true)
+   * - אם יש targetCount: כל לחיצה מעלה progressCount ב-1
+   *   וכשמגיעים ליעד -> מסיימים
+   */
   const handleToggle = (missionId: string) => {
     setMissions((prev) => {
       return prev.map((mission) => {
         if (mission.id !== missionId) return mission
 
+        // אם כבר הושלם, לא עושים כלום (כדי לא "להחזיר אחורה" עם checkbox)
         if (mission.isCompleted) return mission
 
+        // בלי יעד ספירה: מסיימים מיד
         if (!mission.targetCount) {
           return { ...mission, isCompleted: true }
         }
 
+        // עם יעד: מתקדמים שלב-שלב
         const current = mission.progressCount ?? 0
         if (current >= mission.targetCount) {
           return { ...mission, isCompleted: true, progressCount: mission.targetCount }
@@ -117,6 +153,7 @@ export default function MyMissions() {
         </p>
       </header>
 
+      {/* אזור יצירת משימה חדשה */}
       <div className="space-y-4 rounded-2xl border border-gray-800 bg-slate-900/60 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <input
@@ -182,6 +219,7 @@ export default function MyMissions() {
         </div>
       </div>
 
+      {/* הרשימה עצמה */}
       <div className="space-y-3">
         {sortedMissions.map((mission) => (
           <div
@@ -192,6 +230,7 @@ export default function MyMissions() {
               <input
                 type="checkbox"
                 checked={mission.isCompleted}
+                // כל שינוי ב-checkbox מפעיל את הלוגיקה של ההתקדמות/השלמה
                 onChange={() => handleToggle(mission.id)}
                 className="h-4 w-4 accent-blue-500"
               />

@@ -1,3 +1,13 @@
+/**
+ * Contract = מסך "חוזה" מוטיבציוני.
+ *
+ * הרעיון:
+ * - אתה בוחר משימה ודדליין ומתחייב לסכום כסף
+ * - אם לא עמדת בדדליין: הכסף "נתרם"
+ * - אם עמדת: מקבל את הכסף חזרה
+ *
+ * חשוב: פה זה TEST MODE בלבד (אין תשלום אמיתי, זה רק דמו).
+ */
 export default function Contract() {
   return (
     <div className="mx-auto max-w-2xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
@@ -6,7 +16,7 @@ export default function Contract() {
         Put money on the line to beat procrastination
       </h1>
 
-      {/* Warning box */}
+      {/* תיבת הסבר/אזהרה שמבהירה את הרעיון ואת זה שזה דמו */}
       <div className="mb-6 flex gap-3 rounded-lg border border-amber-400/60 bg-amber-500/10 p-4 text-amber-100">
         <svg className="h-6 w-6 shrink-0 text-amber-300" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -19,6 +29,7 @@ export default function Contract() {
         </ul>
       </div>
 
+      {/* כפתור יצירת חוזה (כרגע בלי טופס ולוגיקה) */}
       <button
         type="button"
         className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 font-medium text-white hover:bg-blue-500 sm:w-auto sm:px-6"
@@ -30,7 +41,7 @@ export default function Contract() {
       </button>
       <p className="text-center text-sm text-gray-400">Create some tasks first to add contracts.</p>
 
-      {/* Empty state */}
+      {/* מצב ריק: אין עדיין חוזים */}
       <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800 bg-slate-900/40 py-20 text-center text-gray-300">
         <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-xl bg-slate-800">
           <svg className="h-10 w-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

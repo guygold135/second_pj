@@ -1,18 +1,28 @@
 import { Link } from 'react-router-dom'
 import type { TaskSummary, BudgetSummary } from '../types'
 
+// נתוני דוגמה לסיכום משימות (כרגע לא מחושב מהמשימות האמיתיות, רק הדגמה ל-UI)
 const taskSummary: TaskSummary = {
   activeTasksCount: 0,
   completedTodayCount: 1,
   highPriorityTasksCount: 0,
 }
 
+// נתוני דוגמה לסיכום תקציב (כרגע הדגמה ל-UI)
 const budgetSummary: BudgetSummary = {
   incomeTotal: 0,
   expensesTotal: 0,
   surplus: 0,
 }
 
+/**
+ * Dashboard = "לוח בקרה" שמרכז תצוגת מצב מהירה.
+ *
+ * מה יש פה?
+ * - שורת "Daily Motivation" (קלט טקסט) — כרגע בלי שמירה
+ * - כרטיסי סיכום (Tasks / Goals / Budget / Net Worth) — בעיקר UI
+ * - מצבי "ריק" (Empty States) שמסבירים שאין עדיין מידע
+ */
 export default function Dashboard() {
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
@@ -20,7 +30,7 @@ export default function Dashboard() {
         Your personal productivity and financial command center
       </h1>
 
-      {/* Daily Motivation */}
+      {/* מוטיבציה יומית: שדה טקסט קצר כדי להזכיר לעצמך למה אתה עושה את זה */}
       <div className="mb-8 flex items-center gap-3 rounded-lg border border-blue-500/30 bg-slate-900 px-4 py-3">
         <svg className="h-5 w-5 shrink-0 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
@@ -32,9 +42,9 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Summary cards */}
+      {/* כרטיסי סיכום */}
       <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Tasks */}
+        {/* Tasks: סיכום משימות */}
         <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
           <div className="flex items-start justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-gray-400">Tasks</span>
@@ -48,7 +58,7 @@ export default function Dashboard() {
           <Link to="/dashboard" className="mt-2 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
         </div>
 
-        {/* Goals */}
+        {/* Goals: סיכום מטרות (כרגע נתונים סטטיים) */}
         <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
           <div className="flex items-start justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-gray-400">Goals</span>
@@ -62,7 +72,7 @@ export default function Dashboard() {
           <Link to="/goals" className="mt-2 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
         </div>
 
-        {/* Budget */}
+        {/* Budget: סיכום הכנסות/הוצאות */}
         <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
           <div className="flex items-start justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-gray-400">Budget</span>
@@ -76,7 +86,7 @@ export default function Dashboard() {
           <Link to="/budget" className="mt-2 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
         </div>
 
-        {/* Net Worth */}
+        {/* Net Worth: מצב פיננסי כללי (דמו) */}
         <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
           <div className="flex items-start justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-gray-400">Net Worth</span>
@@ -90,7 +100,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Empty states */}
+      {/* מצבי ריק: מסכים מה רואים כשאין עדיין משימות/מטרות */}
       <div className="grid gap-8 sm:grid-cols-2">
         <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800 bg-slate-900/40 py-16 text-center text-gray-300">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-800">

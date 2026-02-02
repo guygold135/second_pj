@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import type { InvestmentPreset, InvestmentScenario, ChartDataPoint } from '../types'
 
+// כפתורי "בחירה מהירה" לסכומים נפוצים
 const presets: InvestmentPreset[] = [
   { label: '$1,000', value: 1000 },
   { label: '$5,000', value: 5000 },
@@ -18,14 +19,34 @@ const presets: InvestmentPreset[] = [
   { label: '$25,000', value: 25000 },
 ]
 
+/**
+ * חישוב ריבית דריבית (Compound Interest) בצורה פשוטה:
+ * principal = סכום התחלתי
+ * rate = אחוז תשואה שנתי (למשל 0.07 זה 7%)
+ * years = כמה שנים
+ *
+ * חשוב: זה חישוב "הדגמה" בלבד בשביל המסך, לא ייעוץ פיננסי.
+ */
 function compound(principal: number, rate: number, years: number): number {
   return Math.round(principal * Math.pow(1 + rate, years))
 }
 
+/**
+ * Investment = מסך שמדגים איך כסף יכול לגדול לאורך זמן בתרחישים שונים.
+ *
+ * מה המשתמש עושה פה?
+ * - בוחר סכום השקעה (ידנית או דרך presets)
+ * - בוחר כמה שנים
+ * - רואה 3 תרחישים (4% / 7% / 10%) עם ערך סופי + רווח
+ * - רואה גרף שמראה את הגדילה משנה לשנה
+ */
 export default function Investment() {
+  // state של הקלטים
   const [investmentAmount, setInvestmentAmount] = useState(1000)
   const [timeframeYears, setTimeframeYears] = useState(10)
 
+  // תרחישים מחושבים לפי הסכום והזמן.
+  // useMemo מונע חישוב מחדש אם הערכים לא השתנו.
   const scenarios: InvestmentScenario[] = useMemo(() => {
     const conservative = { rate: 0.04, id: 'conservative' as const, name: 'Conservative', iconName: 'checkmark', colorClass: 'text-green-600 border-green-500' }
     const moderate = { rate: 0.07, id: 'moderate' as const, name: 'Moderate', iconName: 'bar-chart', colorClass: 'text-blue-600 border-blue-500' }
@@ -49,6 +70,7 @@ export default function Investment() {
     ]
   }, [investmentAmount, timeframeYears])
 
+  // נקודות לגרף: לכל שנה אנחנו מחשבים את הערך הצפוי בכל תרחיש.
   const chartData: ChartDataPoint[] = useMemo(() => {
     const points: ChartDataPoint[] = []
     for (let year = 0; year <= timeframeYears; year++) {
@@ -62,6 +84,7 @@ export default function Investment() {
     return points
   }, [investmentAmount, timeframeYears])
 
+  // הערך המקסימלי בין התרחישים (כדי להתאים את טווח הציר Y בגרף)
   const maxVal = Math.max(
     scenarios[0].projectedValue,
     scenarios[1].projectedValue,
@@ -74,7 +97,7 @@ export default function Investment() {
         Project your wealth growth across different scenarios
       </h1>
 
-      {/* Inputs */}
+      {/* קלטים: סכום + מספר שנים */}
       <div className="mb-10 grid gap-8 sm:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-300">Investment Amount ($)</label>
@@ -85,6 +108,7 @@ export default function Investment() {
             className="mb-3 w-full rounded-lg bg-slate-900 border border-gray-700 px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <div className="flex flex-wrap gap-2">
+            {/* בחירה מהירה לסכומים */}
             {presets.map((p) => (
               <button
                 key={p.value}
@@ -120,7 +144,7 @@ export default function Investment() {
         </div>
       </div>
 
-      {/* Scenario cards */}
+      {/* כרטיסים: סיכום לכל תרחיש */}
       <div className="mb-10 grid gap-4 sm:grid-cols-3">
         {scenarios.map((s) => (
           <div
@@ -165,7 +189,7 @@ export default function Investment() {
         ))}
       </div>
 
-      {/* Chart */}
+      {/* גרף: איך הערך גדל בכל שנה */}
       <div className="mb-8 h-80 w-full sm:h-96 rounded-2xl border border-gray-800 bg-slate-900/60 p-4">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
@@ -190,7 +214,7 @@ export default function Investment() {
         </ResponsiveContainer>
       </div>
 
-      {/* Disclaimer */}
+      {/* כתב ויתור: חשוב כדי לא להציג את זה כהמלצה פיננסית */}
       <div className="flex gap-3 rounded-lg border border-amber-400/50 bg-amber-500/10 p-4 text-amber-100">
         <svg className="h-6 w-6 shrink-0 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />

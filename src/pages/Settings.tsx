@@ -1,3 +1,9 @@
+/**
+ * Settings = מסך הגדרות.
+ *
+ * כרגע זה רק "מקום שמור" (placeholder) — כלומר עמוד קיים בניווט,
+ * אבל עדיין לא הוסיפו אליו אפשרויות אמיתיות.
+ */
 export default function Settings() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">

@@ -1,11 +1,21 @@
 import type { BudgetSummary } from '../types'
 
+// סיכום לדוגמה (בפרויקט אמיתי היינו מחשבים את זה מרשימת הכנסות/הוצאות)
 const summary: BudgetSummary = {
   incomeTotal: 0,
   expensesTotal: 0,
   surplus: 0,
 }
 
+/**
+ * Budget = מסך תקציב.
+ *
+ * המטרה של המסך:
+ * - לראות "במבט אחד" הכנסות, הוצאות ותזרים נטו
+ * - להוסיף רשומה חדשה (כפתור Add Entry)
+ *
+ * כרגע זה בעיקר UI + נתונים סטטיים, בלי טופס שמירה אמיתי.
+ */
 export default function Budget() {
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
@@ -13,7 +23,7 @@ export default function Budget() {
         Track your income and expenses with clarity
       </h1>
 
-      {/* Finance motivation */}
+      {/* מוטיבציה פיננסית: משפט קצר שמזכיר למה לחסוך/לתכנן */}
       <div className="mb-8 flex items-center gap-3 rounded-lg border border-emerald-300/40 bg-slate-900 px-4 py-3">
         <svg className="h-5 w-5 shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
@@ -25,7 +35,7 @@ export default function Budget() {
         />
       </div>
 
-      {/* Summary cards */}
+      {/* כרטיסי סיכום */}
       <div className="mb-8 grid gap-4 sm:grid-cols-3">
         <div className="flex items-center justify-between rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-lg shadow-black/30">
           <div>
@@ -57,6 +67,7 @@ export default function Budget() {
         </div>
       </div>
 
+      {/* כפתור פעולה (כרגע לא מחובר לטופס אמיתי) */}
       <button
         type="button"
         className="mb-10 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 font-medium text-white hover:bg-blue-500 sm:w-auto sm:px-6"
@@ -67,7 +78,7 @@ export default function Budget() {
         Add Entry
       </button>
 
-      {/* Empty state */}
+      {/* מצב ריק: כשהמערכת עדיין בלי תנועות */}
       <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800 bg-slate-900/40 py-20 text-center text-gray-300">
         <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-xl bg-gray-800">
           <svg className="h-10 w-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
