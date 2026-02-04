@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import type { BudgetSummary } from '../types'
+import { getRandomQuoteForPage } from '../utils/quotes'
 
 // סיכום לדוגמה (בפרויקט אמיתי היינו מחשבים את זה מרשימת הכנסות/הוצאות)
 const summary: BudgetSummary = {
@@ -17,22 +19,17 @@ const summary: BudgetSummary = {
  * כרגע זה בעיקר UI + נתונים סטטיים, בלי טופס שמירה אמיתי.
  */
 export default function Budget() {
+  const [motivationQuote] = useState(() => getRandomQuoteForPage('finance'))
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="text-center text-xl font-medium text-white sm:text-2xl">
-        Track your income and expenses with clarity
-      </h1>
-
-      {/* מוטיבציה פיננסית: משפט קצר שמזכיר למה לחסוך/לתכנן */}
+      {/* מוטיבציה פיננסית: ציטוט במקום קבוע (טקסט סטטי, לא שדה קלט) */}
       <div className="mb-8 flex items-center gap-3 rounded-lg border border-emerald-300/40 bg-slate-900 px-4 py-3">
         <svg className="h-5 w-5 shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
         </svg>
-        <input
-          type="text"
-          placeholder="FINANCE MOTIVATION"
-          className="flex-1 bg-transparent text-white placeholder:text-gray-500 focus:outline-none"
-        />
+        <span className="flex-1 bg-transparent text-white" aria-hidden="true">
+          {motivationQuote}
+        </span>
       </div>
 
       {/* כרטיסי סיכום */}

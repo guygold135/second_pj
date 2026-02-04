@@ -54,16 +54,19 @@ export default function Investment() {
     return [
       {
         ...conservative,
+        annualReturnRate: conservative.rate,
         projectedValue: compound(investmentAmount, conservative.rate, timeframeYears),
         totalGain: compound(investmentAmount, conservative.rate, timeframeYears) - investmentAmount,
       },
       {
         ...moderate,
+        annualReturnRate: moderate.rate,
         projectedValue: compound(investmentAmount, moderate.rate, timeframeYears),
         totalGain: compound(investmentAmount, moderate.rate, timeframeYears) - investmentAmount,
       },
       {
         ...aggressive,
+        annualReturnRate: aggressive.rate,
         projectedValue: compound(investmentAmount, aggressive.rate, timeframeYears),
         totalGain: compound(investmentAmount, aggressive.rate, timeframeYears) - investmentAmount,
       },
@@ -93,10 +96,6 @@ export default function Investment() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-10 px-4 py-8 sm:px-6 lg:px-8 text-white">
-      <h1 className="text-center text-xl font-medium text-white sm:text-2xl">
-        Project your wealth growth across different scenarios
-      </h1>
-
       {/* קלטים: סכום + מספר שנים */}
       <div className="mb-10 grid gap-8 sm:grid-cols-2">
         <div>
@@ -173,7 +172,7 @@ export default function Investment() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
               )}
-              <span className="text-sm font-medium">{s.annualReturnRate * 100}% Annual Return</span>
+              <span className="text-sm font-medium">{Math.round((s.annualReturnRate ?? 0) * 100)}% annual return</span>
             </div>
             <p className="text-2xl font-bold">
               <span className={s.id === 'conservative' ? 'text-emerald-400' : s.id === 'moderate' ? 'text-blue-400' : 'text-purple-400'}>

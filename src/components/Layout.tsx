@@ -40,7 +40,7 @@ export default function Layout() {
     <div className="min-h-screen bg-[#0f172a] text-white">
       {/* תפריט עליון (נשאר קבוע בכל העמודים) */}
       <header className="sticky top-0 z-50 border-b border-gray-900/40 bg-[#0f172a]">
-        <div className="mx-auto flex max-w-7xl items-center gap-6 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-6 px-4 py-3 sm:px-6 lg:px-8">
           <span className="font-semibold tracking-[0.2em] text-white">MISSION FLOW</span>
           <nav className="flex flex-1 flex-nowrap items-center gap-5 text-xs font-semibold uppercase tracking-wide text-gray-300 lg:text-sm">
             <div className="flex flex-1 items-center gap-4">

@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { TaskSummary, BudgetSummary } from '../types'
+import { getRandomQuoteForPage } from '../utils/quotes'
 
 // נתוני דוגמה לסיכום משימות (כרגע לא מחושב מהמשימות האמיתיות, רק הדגמה ל-UI)
 const taskSummary: TaskSummary = {
@@ -24,22 +26,17 @@ const budgetSummary: BudgetSummary = {
  * - מצבי "ריק" (Empty States) שמסבירים שאין עדיין מידע
  */
 export default function Dashboard() {
+  const [motivationQuote] = useState(() => getRandomQuoteForPage('general'))
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="text-center text-xl font-medium text-white sm:text-2xl">
-        Your personal productivity and financial command center
-      </h1>
-
-      {/* מוטיבציה יומית: שדה טקסט קצר כדי להזכיר לעצמך למה אתה עושה את זה */}
+      {/* מוטיבציה יומית: ציטוט במקום קבוע (טקסט סטטי, לא שדה קלט) */}
       <div className="mb-8 flex items-center gap-3 rounded-lg border border-blue-500/30 bg-slate-900 px-4 py-3">
         <svg className="h-5 w-5 shrink-0 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
         </svg>
-        <input
-          type="text"
-          placeholder="DAILY MOTIVATION"
-          className="flex-1 bg-transparent text-white placeholder:text-gray-500 focus:outline-none"
-        />
+        <span className="flex-1 bg-transparent text-white" aria-hidden="true">
+          {motivationQuote}
+        </span>
       </div>
 
       {/* כרטיסי סיכום */}

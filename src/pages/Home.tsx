@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import type { Task } from '../types'
+import { getRandomQuote } from '../utils/quotes'
 
 // נתוני דוגמה למשימות שמוצגות בדף הבית.
 // חשוב: בפרויקט הזה אין כרגע שרת/דאטה-בייס, אז הכל נשמר רק בזיכרון של הדפדפן.
@@ -100,6 +101,13 @@ export default function Home() {
   const [formState, setFormState] = useState(defaultFormState)
   // isFormOpen: האם להציג את חלון הוספת המשימה
   const [isFormOpen, setIsFormOpen] = useState(false)
+  // מוטבציה דינמית לפי קטגוריה — מתעדכן בכל שינוי קטגוריה
+  const [motivationQuote, setMotivationQuote] = useState(() => getRandomQuote('General'))
+
+  // בכל שינוי קטגוריה (או בפתיחת המודאל) מרעננים ציטוט מוטיבציה אקראי
+  useEffect(() => {
+    if (isFormOpen) setMotivationQuote(getRandomQuote(formState.category))
+  }, [formState.category, isFormOpen])
 
   // כששולחים את הטופס (לוחצים Add Task) אנחנו יוצרים משימה חדשה ומוסיפים אותה לרשימה.
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -245,11 +253,13 @@ export default function Home() {
                 <label className="block text-sm font-medium text-gray-600">
                   Task Name
                   <input
+                    id="task-input"
                     type="text"
                     value={formState.title}
                     onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
+                    placeholder={motivationQuote}
                     required
-                className="mt-1 w-full rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="mt-1 w-full rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </label>
                 <label className="block text-sm font-medium text-gray-600">

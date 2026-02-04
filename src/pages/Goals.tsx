@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { getRandomQuoteForPage } from '../utils/quotes'
+
 /**
  * Goals = מסך מטרות.
  *
@@ -7,22 +10,17 @@
  * כרגע זה מסך "שלד" (UI) בלי רשימה ושמירה אמיתית של מטרות.
  */
 export default function Goals() {
+  const [motivationQuote] = useState(() => getRandomQuoteForPage('goals'))
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="text-center text-xl font-medium text-white sm:text-2xl">
-        Set ambitious targets and track your progress
-      </h1>
-
-      {/* מוטיבציה למטרה: שדה קצר שמזכיר למה המטרה חשובה */}
+      {/* מוטיבציה למטרה: ציטוט במקום קבוע (טקסט סטטי, לא שדה קלט) */}
       <div className="mb-6 flex items-start gap-3 rounded-lg border border-purple-500/40 bg-slate-900 px-4 py-3">
         <svg className="mt-0.5 h-5 w-5 shrink-0 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
         </svg>
-        <input
-          type="text"
-          placeholder="GOAL MOTIVATION"
-          className="flex-1 bg-transparent text-white placeholder:text-gray-400 focus:outline-none"
-        />
+        <span className="flex-1 bg-transparent text-white" aria-hidden="true">
+          {motivationQuote}
+        </span>
       </div>
 
       {/* פעולה ראשית: יצירת מטרה חדשה (כרגע בלי לוגיקה) */}
