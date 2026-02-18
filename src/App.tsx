@@ -1,4 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { GoalsProvider } from './contexts/GoalsContext'
+import { MissionsProvider } from './contexts/MissionsContext'
+import { CurrencyProvider } from './contexts/CurrencyContext'
 import Layout from './components/Layout'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
@@ -6,7 +9,7 @@ import MyMissions from './pages/MyMissions'
 import Goals from './pages/Goals'
 import Budget from './pages/Budget'
 import Contract from './pages/Contract'
-import Investment from './pages/Investment'
+import OpportunityCost from './pages/OpportunityCost'
 import Settings from './pages/Settings'
 
 /**
@@ -22,7 +25,9 @@ import Settings from './pages/Settings'
  */
 export default function App() {
   return (
-    // BrowserRouter מקשיב לשינויים ב-URL ומחליט איזה "מסך" להציג.
+    <CurrencyProvider>
+    <GoalsProvider>
+    <MissionsProvider>
     <BrowserRouter>
       {/* Routes הוא אוסף של כל הכתובות שהאפליקציה יודעת לטפל בהן. */}
       <Routes>
@@ -39,11 +44,14 @@ export default function App() {
           <Route path="my-missions" element={<MyMissions />} />
           <Route path="goals" element={<Goals />} />
           <Route path="budget" element={<Budget />} />
-          <Route path="investment" element={<Investment />} />
+          <Route path="investment" element={<OpportunityCost title="Opportunity Cost" />} />
           <Route path="contract" element={<Contract />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>
+    </MissionsProvider>
+    </GoalsProvider>
+    </CurrencyProvider>
   )
 }

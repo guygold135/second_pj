@@ -1,16 +1,103 @@
-/**
- * Settings = מסך הגדרות.
- *
- * כרגע זה רק "מקום שמור" (placeholder) — כלומר עמוד קיים בניווט,
- * אבל עדיין לא הוסיפו אליו אפשרויות אמיתיות.
- */
+import { useState, useRef, useEffect } from 'react'
+import { useCurrency } from '../contexts/CurrencyContext'
+import { CURRENCIES } from '../utils/currencies'
+
 export default function Settings() {
+  const { currencyCode, setCurrencyCode, formatMoney } = useCurrency()
+  const [selectorOpen, setSelectorOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  const selected = CURRENCIES.find((c) => c.code === currencyCode)
+  const filtered = search.trim()
+    ? CURRENCIES.filter(
+        (c) =>
+          c.code.toLowerCase().includes(search.toLowerCase()) ||
+          c.name.toLowerCase().includes(search.toLowerCase())
+      )
+    : CURRENCIES
+
+  useEffect(() => {
+    if (!selectorOpen) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setSelectorOpen(false)
+    }
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [selectorOpen])
+
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="mb-6 text-center text-xl font-medium text-gray-600 sm:text-2xl">
+    <div className="mx-auto max-w-2xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+      <h1 className="text-xl font-medium text-white sm:text-2xl">
         Settings
       </h1>
-      <p className="text-center text-gray-500">Settings page — coming soon.</p>
+
+      <section className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-lg shadow-black/20">
+        <h2 className="mb-1 text-sm font-medium uppercase tracking-wider text-gray-400">
+          Currency
+        </h2>
+        <p className="mb-4 text-sm text-gray-500">
+          Used for amounts in Budget and related pages.
+        </p>
+        <div ref={ref} className="relative max-w-sm">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectorOpen((o) => !o)
+              if (!selectorOpen) setSearch('')
+            }}
+            className="flex w-full items-center justify-between rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-left text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+          >
+            <span>
+              {selected ? `${selected.code} — ${selected.name}` : 'Select currency'}
+            </span>
+            <svg className="h-5 w-5 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {selectorOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-full rounded-lg border border-gray-700 bg-slate-900 py-2 shadow-xl">
+              <div className="px-2 pb-2">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by code or name..."
+                  className="w-full rounded border border-gray-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-cyan-500 focus:outline-none"
+                  autoFocus
+                />
+              </div>
+              <ul className="max-h-64 overflow-auto">
+                {filtered.length === 0 ? (
+                  <li className="px-4 py-3 text-sm text-gray-500">No matching currency</li>
+                ) : (
+                  filtered.map((c) => (
+                    <li key={c.code}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrencyCode(c.code)
+                          setSelectorOpen(false)
+                          setSearch('')
+                        }}
+                        className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-slate-800 ${
+                          c.code === currencyCode ? 'bg-cyan-500/20 text-cyan-300' : 'text-white'
+                        }`}
+                      >
+                        <span className="font-medium">{c.code}</span>
+                        <span className="text-gray-400">{c.name}</span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+        <p className="mt-3 text-xs text-gray-500">
+          Example: {formatMoney(1234.56)}
+        </p>
+      </section>
     </div>
   )
 }

@@ -17,43 +17,15 @@ import {
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { useGoals } from '../contexts/GoalsContext'
+import { useMissions, GOAL_FILTER_PREFIX, type Mission, type Recurrence } from '../contexts/MissionsContext'
 import { getRandomQuoteForPage } from '../utils/quotes'
-
-// כמה פעמים משימה חוזרת:
-// - none: חד-פעמי
-// - daily: כל יום
-// - weekly: כל שבוע
-type Recurrence = 'none' | 'daily' | 'weekly'
-
-/**
- * Mission = "משימה חוזרת/משימה אישית" (במסך My Missions).
- * זה דומה ל-Task, אבל פה יש גם רעיון של חזרה (daily/weekly)
- * וגם "ספירה" (targetCount/progressCount) עד שמסמנים כבוצע.
- */
-interface Mission {
-  id: string
-  title: string
-  category: string
-  recurrence: Recurrence
-  duration: string
-  targetCount?: number
-  progressCount?: number
-  createdAt: string
-  isCompleted: boolean
-  /** תאריך/שעה שבה המשימה סומנה כהושלמה — לשימוש במסנן "Completed missions". */
-  completedAt?: string
-  /** סדר תצוגה בתוך הקטגוריה — נשמר כשמשנים סדר בגרירה; מוצג כשעוברים לקטגוריה או ב־All. */
-  orderInCategory?: number
-}
-
-// התחלה עם רשימה ריקה כדי להציג את מצב הריק (target + טקסט) עד שמוסיפים משימה.
-const initialMissions: Mission[] = []
-
-// טווחים ל־combobox: שעות 0–99, דקות 0–59. רשימות להצעת בחירה: 0–23, 0/15/30/45.
-const initialCategoryOrder = ['General', 'Work', 'Personal', 'Health', 'Study']
+/** שם התיקייה בסרגל — לא קטגוריה לבחירה, רק כותרת לתיקייה. */
+const CATEGORIES_FOLDER_NAME = 'General'
+/** תיקיית "Goals" בסרגל — כותרת בלבד, כמו General. */
+const GOALS_FOLDER_NAME = 'Goals'
 /** מסנן מיוחד בסרגל — מציג רק משימות שהושלמו; לא קטגוריה אמיתית ולא מופיע בבורר קטגוריה בטופס. */
 const COMPLETED_MISSIONS_FILTER = 'Completed missions'
-
 /** אייקון ידית גרירה: שתי עמודות של שלוש נקודות (2x3). */
 function DragHandleIcon({ className }: { className?: string }) {
   return (
@@ -64,6 +36,22 @@ function DragHandleIcon({ className }: { className?: string }) {
       <circle cx="8" cy="8" r="1.5" />
       <circle cx="4" cy="12" r="1.5" />
       <circle cx="8" cy="12" r="1.5" />
+    </svg>
+  )
+}
+
+/** אייקון תיקייה — סגור כשהתיקייה מקופלת, פתוח כשמוצגת. */
+function FolderIcon({ open, className }: { open: boolean; className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {open ? (
+        <>
+          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h2l2 4h10a2 2 0 012 2z" />
+          <path d="M2 11v8a2 2 0 002 2h16a2 2 0 002-2v-8H2z" />
+        </>
+      ) : (
+        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h2l2 4h10a2 2 0 012 2v2H2z" />
+      )}
     </svg>
   )
 }
@@ -146,6 +134,75 @@ function SortableCategoryItem({
   )
 }
 
+/** פריט יעד (Goal) בסרגל — ניתן לגרירה ומחיקה, כמו SortableCategoryItem. */
+function SortableGoalItem({
+  goal,
+  isSelected,
+  onSelect,
+  onDelete,
+  isLast,
+}: {
+  goal: { id: string; title: string }
+  isSelected: boolean
+  onSelect: () => void
+  onDelete: (id: string) => void
+  isLast?: boolean
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: goal.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group flex items-center gap-2 py-1 transition-[transform,opacity] duration-200 ease-out ${!isLast ? 'border-b border-gray-700' : ''} ${isDragging ? 'opacity-40' : ''}`}
+    >
+      <span
+        {...listeners}
+        {...attributes}
+        className="cursor-grab touch-none shrink-0 rounded p-1 text-gray-500 hover:text-gray-400 active:cursor-grabbing"
+        aria-label="Drag to reorder"
+      >
+        <DragHandleIcon className="h-3.5 w-3" />
+      </span>
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
+          isSelected ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+        }`}
+      >
+        {goal.title}
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onDelete(goal.id)
+        }}
+        className="shrink-0 rounded-lg p-1 text-gray-400 opacity-0 transition-[opacity,color] duration-150 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 focus:outline-none focus:opacity-100 focus:ring-2 focus:ring-red-400/50"
+        aria-label="Delete goal"
+      >
+        <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
+          <path d="M10 11v6M14 11v6" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
 /**
  * כרטיס משימה ניתן לגרירה — לוגיקה זהה לקטגוריות (SortableCategoryItem):
  * useSortable + verticalListSortingStrategy, רק ידית הגרירה (2x3 נקודות) מפעילה גרירה — Checkbox ו-Delete נשארים לחיצים.
@@ -156,12 +213,18 @@ function SortableMissionCard({
   onToggle,
   onDelete,
   onEdit,
+  getGoalById,
 }: {
   mission: Mission
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onEdit: (mission: Mission) => void
+  getGoalById?: (id: string) => { title: string } | undefined
 }) {
+  const categoryLabel =
+    mission.category.startsWith(GOAL_FILTER_PREFIX) && getGoalById
+      ? getGoalById(mission.goalId ?? mission.category.slice(GOAL_FILTER_PREFIX.length))?.title ?? mission.category
+      : mission.category
   const {
     attributes,
     listeners,
@@ -231,7 +294,7 @@ function SortableMissionCard({
             {mission.title}
           </p>
           <p className="text-xs text-gray-400">
-            {mission.category} • {mission.recurrence !== 'none' ? mission.recurrence : 'One-time'} • Duration: {mission.duration}
+            {categoryLabel} • {mission.recurrence !== 'none' ? mission.recurrence : 'One-time'} • Duration: {mission.duration}
             {mission.targetCount ? ` • ${mission.progressCount ?? 0}/${mission.targetCount}` : ''}
             {mission.isCompleted && mission.completedAt && (
               <> • Completed: {new Date(mission.completedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</>
@@ -406,9 +469,8 @@ function DurationCombobox({
  * שים לב: הכל נשמר רק בזיכרון של הדף (state), אין שמירה קבועה.
  */
 export default function MyMissions() {
-  // missions: הרשימה שמוצגת במסך
-  const [missions, setMissions] = useState(initialMissions)
-  // שדות לטופס "הוספת משימה"
+  const { missions, setMissions, categoriesOrder, setCategoriesOrder } = useMissions()
+  const { goals: goalsList, setGoals: setGoalsList, getGoalById, deleteGoal: deleteGoalFromContext } = useGoals()
   const [newTitle, setNewTitle] = useState('')
   const [newCategory, setNewCategory] = useState('')
   const [categoryError, setCategoryError] = useState(false)
@@ -418,14 +480,15 @@ export default function MyMissions() {
   const [minutes, setMinutes] = useState(30)
   const [newTargetCount, setNewTargetCount] = useState(1)
   const [missionPlaceholder] = useState(() => getRandomQuoteForPage('general'))
-  // קטגוריה נבחרת בסרגל הימני — "All" או שם קטגוריה; מסננת את רשימת המשימות.
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('All')
-  // סדר הקטגוריות בסרגל הימני — ניתן לגרירה; עדכון ב-onDragEnd משנה את האינדקסים ונשמר ב-state.
-  const [categoriesOrder, setCategoriesOrder] = useState<string[]>(initialCategoryOrder)
   // קטגוריה שנגררת כרגע — משמשת ל-DragOverlay: התצוגה "נצמדת" לעכבר (transform-based, 60FPS).
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   // משימה שנגררת כרגע — להצגה ב-DragOverlay; שחרור על קטגוריה אחרת מעדכן את mission.category.
   const [activeMissionId, setActiveMissionId] = useState<string | null>(null)
+  // תיקיית "General" — להצגה/הסתרה של הקטגוריות שבתוכה (Work, Personal וכו').
+  const [generalFolderExpanded, setGeneralFolderExpanded] = useState(true)
+  // תיקיית "Goals" — להצגה/הסתרה.
+  const [goalsFolderExpanded, setGoalsFolderExpanded] = useState(true)
   // הוספת קטגוריה חדשה: לחיצה על "+" מציגה שדה בתחתית הרשימה; Enter מוסיף את השם ל-categoriesOrder (ומופיע גם בבורר קטגוריה בטופס משימה).
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
@@ -441,6 +504,27 @@ export default function MyMissions() {
   const [completedRecurrenceFilter, setCompletedRecurrenceFilter] = useState<'all' | Recurrence>('all')
   const completedDateFromRef = useRef<HTMLInputElement>(null)
   const completedDateToRef = useRef<HTMLInputElement>(null)
+
+  const closeAddMissionFormAndReset = useCallback(() => {
+    setShowAddMissionForm(false)
+    setEditingMissionId(null)
+    setNewTitle('')
+    setNewCategory('')
+    setCategoryError(false)
+    setNewRecurrence('')
+    setRecurrenceError(false)
+    setHours(0)
+    setMinutes(30)
+    setNewTargetCount(1)
+  }, [])
+
+  const selectCategory = useCallback(
+    (filter: string) => {
+      if (showAddMissionForm) closeAddMissionFormAndReset()
+      setSelectedCategoryFilter(filter)
+    },
+    [showAddMissionForm, closeAddMissionFormAndReset],
+  )
 
   useEffect(() => {
     if (isAddingCategory) {
@@ -471,6 +555,12 @@ export default function MyMissions() {
     }
   }, [activeMissionId])
 
+  // סדר קטגוריות לתצוגה/מיון — כולל "General", קטגוריות רגילות, ויעדים (Goals) כדי שיופיעו ב־All.
+  const categoryOrderForData = useMemo(
+    () => [CATEGORIES_FOLDER_NAME, ...categoriesOrder, ...goalsList.map((g) => `goal:${g.id}`)],
+    [categoriesOrder, goalsList],
+  )
+
   // מיון: קודם לא הושלמו ואז הושלמו; בתוך כל קטגוריה לפי orderInCategory (סדר שנשמר מגרירה).
   const sortedMissions = useMemo(() => {
     const byCategory = new Map<string, Mission[]>()
@@ -480,7 +570,7 @@ export default function MyMissions() {
       byCategory.set(m.category, list)
     }
     const result: Mission[] = []
-    for (const cat of categoriesOrder) {
+    for (const cat of categoryOrderForData) {
       const list = byCategory.get(cat) ?? []
       const sorted = [...list].sort((a, b) => {
         const oa = a.orderInCategory ?? 0
@@ -491,7 +581,7 @@ export default function MyMissions() {
       result.push(...sorted)
     }
     return result
-  }, [missions, categoriesOrder])
+  }, [missions, categoryOrderForData])
   // חיישנים ל־dnd-kit: גרירה עם עכבר (מרחק 5px כדי לא להפעיל בטעות), ומקלדת.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -511,12 +601,12 @@ export default function MyMissions() {
       const result = closestCenter(args)
       const withoutActive = result.filter((c) => c.id !== args.active?.id)
       if (withoutActive.length === 0) return []
-      const categorySet = new Set(categoriesOrder)
+      const categorySet = new Set(categoryOrderForData)
       const missionCollisions = withoutActive.filter((c) => !categorySet.has(String(c.id)))
       if (missionCollisions.length > 0) return missionCollisions
       return withoutActive
     },
-    [categoriesOrder],
+    [categoryOrderForData],
   )
 
   // משימות לתצוגה — מסתירים את המשימה שנמצאת בעריכה (מופיעה בטופס).
@@ -571,21 +661,21 @@ export default function MyMissions() {
       list.push(m)
       byCategory.set(m.category, list)
     }
-    return categoriesOrder
+    return categoryOrderForData
       .filter((cat) => (byCategory.get(cat)?.length ?? 0) > 0)
       .map((cat) => ({ category: cat, missions: byCategory.get(cat)! }))
-  }, [completedMissionsFiltered, completedCategoryFilter, categoriesOrder])
+  }, [completedMissionsFiltered, completedCategoryFilter, categoryOrderForData])
 
-  // רשימה לסינון: All / קטגוריה = רק משימות שלא הושלמו; "Completed missions" = רק הושלמו (אחרי מסנני קטגוריה ותאריך).
-  const displayedMissions = useMemo(
-    () =>
-      selectedCategoryFilter === COMPLETED_MISSIONS_FILTER
-        ? completedMissionsFiltered
-        : selectedCategoryFilter === 'All'
-          ? missionsForDisplay.filter((m) => !m.isCompleted)
-          : missionsForDisplay.filter((m) => m.category === selectedCategoryFilter && !m.isCompleted),
-    [missionsForDisplay, selectedCategoryFilter, completedMissionsFiltered],
-  )
+  // רשימה לסינון: All / קטגוריה / goal:id = רק משימות שלא הושלמו; "Completed missions" = רק הושלמו.
+  const displayedMissions = useMemo(() => {
+    if (selectedCategoryFilter === COMPLETED_MISSIONS_FILTER) return completedMissionsFiltered
+    if (selectedCategoryFilter === 'All') return missionsForDisplay.filter((m) => !m.isCompleted)
+    if (selectedCategoryFilter.startsWith(GOAL_FILTER_PREFIX)) {
+      const goalId = selectedCategoryFilter.slice(GOAL_FILTER_PREFIX.length)
+      return missionsForDisplay.filter((m) => !m.isCompleted && m.goalId === goalId)
+    }
+    return missionsForDisplay.filter((m) => m.category === selectedCategoryFilter && !m.isCompleted)
+  }, [missionsForDisplay, selectedCategoryFilter, completedMissionsFiltered])
 
   // כשמציגים "All": קיבוץ משימות שלא הושלמו לפי קטגוריה; משימות שהושלמו מוצגות רק ב־"Completed missions".
   const missionsGroupedByCategory = useMemo(() => {
@@ -597,17 +687,20 @@ export default function MyMissions() {
       list.push(m)
       byCategory.set(m.category, list)
     }
-    return categoriesOrder
+    return categoryOrderForData
       .filter((cat) => (byCategory.get(cat)?.length ?? 0) > 0)
       .map((cat) => ({ category: cat, missions: byCategory.get(cat)! }))
-  }, [missionsForDisplay, selectedCategoryFilter, categoriesOrder])
+  }, [missionsForDisplay, selectedCategoryFilter, categoryOrderForData])
 
   // הוספת משימה חדשה או שמירת עריכה — משימה משתנה רק אחרי לחיצה כאן. קטגוריה חייבת להיות תקפה (לא "Choose category").
   const handleAdd = () => {
     if (!newTitle.trim()) return
     const target = newTargetCount >= 1 ? newTargetCount : 1
     const durationStr = `${hours}h ${minutes}m`
-    const isCategoryValid = newCategory !== '' && categoriesOrder.includes(newCategory)
+    const isCategoryValid =
+      newCategory !== '' &&
+      (categoriesOrder.includes(newCategory) ||
+        (newCategory.startsWith(GOAL_FILTER_PREFIX) && goalsList.some((g) => `goal:${g.id}` === newCategory)))
     const validRecurrences: Recurrence[] = ['none', 'daily', 'weekly']
     const isRecurrenceValid = newRecurrence !== '' && validRecurrences.includes(newRecurrence as Recurrence)
     if (editingMissionId) {
@@ -622,6 +715,7 @@ export default function MyMissions() {
                 duration: durationStr,
                 targetCount: target,
                 progressCount: m.progressCount ?? (target ? 0 : undefined),
+                goalId: newCategory.startsWith(GOAL_FILTER_PREFIX) ? newCategory.slice(GOAL_FILTER_PREFIX.length) : undefined,
               }
             : m,
         ),
@@ -646,6 +740,7 @@ export default function MyMissions() {
             createdAt: new Date().toISOString(),
             isCompleted: false,
             orderInCategory: nextOrder,
+            goalId: newCategory.startsWith(GOAL_FILTER_PREFIX) ? newCategory.slice(GOAL_FILTER_PREFIX.length) : undefined,
           },
           ...prev,
         ]
@@ -767,7 +862,7 @@ export default function MyMissions() {
 
   const submitNewCategory = () => {
     const name = newCategoryName.trim()
-    if (!name || name === 'All' || name === COMPLETED_MISSIONS_FILTER) return
+    if (!name || name === 'All' || name === COMPLETED_MISSIONS_FILTER || name === CATEGORIES_FOLDER_NAME) return
     if (categoriesOrder.some((c) => c.toLowerCase() === name.toLowerCase())) {
       setNewCategoryName('')
       setIsAddingCategory(false)
@@ -786,7 +881,7 @@ export default function MyMissions() {
     setMissions((prev) =>
       prev.map((m) => (m.category === cat ? { ...m, category: fallback } : m))
     )
-    if (selectedCategoryFilter === cat) setSelectedCategoryFilter('All')
+    if (selectedCategoryFilter === cat) selectCategory('All')
   }
 
   const handleToggle = (missionId: string) => {
@@ -842,6 +937,11 @@ export default function MyMissions() {
             type="button"
             onClick={() => {
               setEditingMissionId(null)
+              if (selectedCategoryFilter !== 'All' && selectedCategoryFilter !== COMPLETED_MISSIONS_FILTER) {
+                setNewCategory(selectedCategoryFilter)
+              } else {
+                setNewCategory('')
+              }
               setShowAddMissionForm(true)
             }}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gray-600 bg-slate-900/40 px-4 py-3 text-sm font-medium text-gray-300 transition hover:border-blue-500/50 hover:bg-slate-800/60 hover:text-white"
@@ -878,11 +978,14 @@ export default function MyMissions() {
               aria-label="Category"
               aria-invalid={categoryError}
             >
-              {!editingMissionId && (
+              {!editingMissionId && selectedCategoryFilter === 'All' && (
                 <option value="">Choose category</option>
               )}
               {categoriesOrder.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
+              ))}
+              {goalsList.map((g) => (
+                <option key={g.id} value={`goal:${g.id}`}>{g.title}</option>
               ))}
             </select>
             <select
@@ -999,6 +1102,9 @@ export default function MyMissions() {
               {categoriesOrder.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
+              {goalsList.map((g) => (
+                <option key={g.id} value={`goal:${g.id}`}>{g.title}</option>
+              ))}
             </select>
           </label>
           <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
@@ -1089,7 +1195,9 @@ export default function MyMissions() {
               ? 'No active missions yet. Create one above to get started!'
               : selectedCategoryFilter === COMPLETED_MISSIONS_FILTER
                 ? 'No completed missions yet.'
-                : `No missions in ${selectedCategoryFilter} yet. Create one above or choose another category.`}
+                : selectedCategoryFilter.startsWith(GOAL_FILTER_PREFIX)
+                  ? `No missions for ${getGoalById(selectedCategoryFilter.slice(GOAL_FILTER_PREFIX.length))?.title ?? 'this goal'} yet. Create one above or choose another goal.`
+                  : `No missions in ${selectedCategoryFilter} yet. Create one above or choose another category.`}
           </p>
         </div>
       ) : (
@@ -1116,7 +1224,7 @@ export default function MyMissions() {
             {(missionsGroupedByCategory ?? completedMissionsGroupedByCategory!)!.map(({ category, missions }) => (
               <section key={category} className="space-y-3" aria-labelledby={`category-${category}`}>
                 <h2 id={`category-${category}`} className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-                  {category}
+                  {category.startsWith(GOAL_FILTER_PREFIX) ? getGoalById(category.slice(GOAL_FILTER_PREFIX.length))?.title ?? category : category}
                 </h2>
                 <DroppableSection category={category} className="space-y-3" showDropIndicator={false}>
                   <SortableContext items={missions.map((m) => m.id)} strategy={verticalListSortingStrategy}>
@@ -1127,6 +1235,7 @@ export default function MyMissions() {
                         onToggle={handleToggle}
                         onDelete={handleDelete}
                         onEdit={handleEdit}
+                        getGoalById={getGoalById}
                       />
                     ))}
                   </SortableContext>
@@ -1144,6 +1253,7 @@ export default function MyMissions() {
                   onToggle={handleToggle}
                   onDelete={handleDelete}
                   onEdit={handleEdit}
+                  getGoalById={getGoalById}
                 />
               ))}
             </SortableContext>
@@ -1159,6 +1269,10 @@ export default function MyMissions() {
         >
           {activeMissionId ? (() => {
             const m = missions.find((mission) => mission.id === activeMissionId)
+            const overlayCategoryLabel =
+              m?.category.startsWith(GOAL_FILTER_PREFIX) && getGoalById
+                ? getGoalById(m.goalId ?? m.category.slice(GOAL_FILTER_PREFIX.length))?.title ?? m?.category
+                : m?.category
             return m ? (
               <div className="flex cursor-grabbing items-center justify-between rounded-xl border border-gray-700 bg-slate-800/95 px-4 py-3 shadow-lg">
                 <span className="shrink-0 rounded p-1 text-gray-400">
@@ -1168,7 +1282,7 @@ export default function MyMissions() {
                   <div className="min-w-0 flex-1">
                     <p className="text-base font-medium leading-tight text-white">{m.title}</p>
                     <p className="text-xs text-gray-400">
-                      {m.category} • {m.recurrence !== 'none' ? m.recurrence : 'One-time'} • Duration: {m.duration}
+                      {overlayCategoryLabel} • {m.recurrence !== 'none' ? m.recurrence : 'One-time'} • Duration: {m.duration}
                     </p>
                   </div>
                 </div>
@@ -1193,20 +1307,22 @@ export default function MyMissions() {
         <aside className="flex w-48 shrink-0 flex-col rounded-xl border border-gray-800 bg-slate-900/60 p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Categories</p>
-          <button
-            type="button"
-            onClick={() => setIsAddingCategory(true)}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-400 transition hover:bg-slate-700 hover:text-white"
-            aria-label="Add category"
-          >
-            +
-          </button>
+          {generalFolderExpanded && (
+            <button
+              type="button"
+              onClick={() => setIsAddingCategory(true)}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-400 transition hover:bg-slate-700 hover:text-white"
+              aria-label="Add category"
+            >
+              +
+            </button>
+          )}
         </div>
         <nav className="flex min-h-0 flex-1 flex-col" aria-label="Filter by category">
           <div className="border-b border-gray-700">
             <button
               type="button"
-              onClick={() => setSelectedCategoryFilter('All')}
+              onClick={() => selectCategory('All')}
               className={`w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
                 selectedCategoryFilter === 'All'
                   ? 'bg-blue-600 text-white'
@@ -1227,64 +1343,148 @@ export default function MyMissions() {
               onDragEnd={(event: DragEndEvent) => {
                 setActiveCategory(null)
                 const { active, over } = event
-                if (over && active.id !== over.id) {
+                if (!over || active.id === over.id) return
+                const activeId = active.id as string
+                const overId = over.id as string
+                if (categoriesOrder.includes(activeId)) {
                   setCategoriesOrder((prev) => {
-                    const oldIndex = prev.indexOf(active.id as string)
-                    const newIndex = prev.indexOf(over.id as string)
+                    const oldIndex = prev.indexOf(activeId)
+                    const newIndex = prev.indexOf(overId)
                     if (oldIndex === -1 || newIndex === -1) return prev
                     return arrayMove(prev, oldIndex, newIndex)
                   })
+                } else if (goalsList.some((g) => g.id === activeId)) {
+                  const oldIndex = goalsList.findIndex((g) => g.id === activeId)
+                  const newIndex = goalsList.findIndex((g) => g.id === overId)
+                  if (oldIndex !== -1 && newIndex !== -1) {
+                    setGoalsList(arrayMove(goalsList, oldIndex, newIndex))
+                  }
                 }
               }}
               onDragCancel={(_event: DragCancelEvent) => {
                 setActiveCategory(null)
               }}
             >
-              <SortableContext items={categoriesOrder} strategy={verticalListSortingStrategy}>
-              {categoriesOrder.map((cat, index) => (
-                <SortableCategoryItem
-                  key={cat}
-                  id={cat}
-                  isSelected={selectedCategoryFilter === cat}
-                  onSelect={() => setSelectedCategoryFilter(cat)}
-                  onDelete={handleDeleteCategory}
-                  isLast={index === categoriesOrder.length - 1}
-                />
-              ))}
-                {isAddingCategory && (
-                  <div className="flex items-center gap-2 rounded-lg">
-                    <input
-                      ref={newCategoryInputRef}
-                      type="text"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          submitNewCategory()
-                        }
-                        if (e.key === 'Escape') {
-                          setNewCategoryName('')
-                          setIsAddingCategory(false)
-                          newCategoryInputRef.current?.blur()
-                        }
-                      }}
-                      onBlur={() => {
-                        if (newCategoryName.trim()) submitNewCategory()
-                        else setIsAddingCategory(false)
-                      }}
-                      placeholder="New category"
-                      className="w-full rounded-lg border border-gray-600 bg-slate-800 px-2 py-2 text-sm text-white placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      aria-label="New category name"
+              {/* General = תיקייה (לא קטגוריה) — לחיצה מציגה/מסתירה את הקטגוריות שבתוכה. */}
+              <div className="border-b border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setGeneralFolderExpanded((e) => !e)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-gray-300 transition hover:bg-slate-800 hover:text-white"
+                  aria-expanded={generalFolderExpanded}
+                  aria-label={generalFolderExpanded ? 'Collapse General folder' : 'Expand General folder'}
+                >
+                  <FolderIcon open={generalFolderExpanded} className="h-4 w-4 shrink-0 text-amber-500/90" />
+                  <span className="min-w-0 flex-1">{CATEGORIES_FOLDER_NAME}</span>
+                  <svg
+                    className={`h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 ${generalFolderExpanded ? 'rotate-0' : '-rotate-90'}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+              {generalFolderExpanded && (
+                <SortableContext items={categoriesOrder} strategy={verticalListSortingStrategy}>
+                  {categoriesOrder.map((cat, index) => (
+                    <SortableCategoryItem
+                      key={cat}
+                      id={cat}
+                      isSelected={selectedCategoryFilter === cat}
+                      onSelect={() => selectCategory(cat)}
+                      onDelete={handleDeleteCategory}
+                      isLast={index === categoriesOrder.length - 1 && !isAddingCategory}
                     />
-                  </div>
-                )}
-              </SortableContext>
-              {/* Completed missions — באותו מקום בזרימה (לא נדבק לתחתית), כך שכשבוחרים לא "נדבק למעלה". */}
+                  ))}
+                  {isAddingCategory && (
+                    <div className="flex items-center gap-2 rounded-lg">
+                      <input
+                        ref={newCategoryInputRef}
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            submitNewCategory()
+                          }
+                          if (e.key === 'Escape') {
+                            setNewCategoryName('')
+                            setIsAddingCategory(false)
+                            newCategoryInputRef.current?.blur()
+                          }
+                        }}
+                        onBlur={() => {
+                          if (newCategoryName.trim()) submitNewCategory()
+                          else setIsAddingCategory(false)
+                        }}
+                        placeholder="New category"
+                        className="w-full rounded-lg border border-gray-600 bg-slate-800 px-2 py-2 text-sm text-white placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        aria-label="New category name"
+                      />
+                    </div>
+                  )}
+                </SortableContext>
+              )}
+              {/* Goals — תיקייה נפרדת (כרגע ללא תוכן). */}
+              <div className="border-b border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setGoalsFolderExpanded((e) => !e)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-gray-300 transition hover:bg-slate-800 hover:text-white"
+                  aria-expanded={goalsFolderExpanded}
+                  aria-label={goalsFolderExpanded ? 'Collapse Goals folder' : 'Expand Goals folder'}
+                >
+                  <FolderIcon open={goalsFolderExpanded} className="h-4 w-4 shrink-0 text-amber-500/90" />
+                  <span className="min-w-0 flex-1">{GOALS_FOLDER_NAME}</span>
+                  <svg
+                    className={`h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 ${goalsFolderExpanded ? 'rotate-0' : '-rotate-90'}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+              {goalsFolderExpanded && (
+                <div className="py-1">
+                  {goalsList.length === 0 ? (
+                    <p className="rounded-lg px-2 py-2 text-xs text-gray-500">No goals yet</p>
+                  ) : (
+                    <SortableContext items={goalsList.map((g) => g.id)} strategy={verticalListSortingStrategy}>
+                      {goalsList.map((goal, index) => (
+                        <SortableGoalItem
+                          key={goal.id}
+                          goal={goal}
+                          isSelected={selectedCategoryFilter === `${GOAL_FILTER_PREFIX}${goal.id}`}
+                          onSelect={() => selectCategory(`${GOAL_FILTER_PREFIX}${goal.id}`)}
+                          onDelete={(id) => {
+                            deleteGoalFromContext(id)
+                            if (selectedCategoryFilter === `${GOAL_FILTER_PREFIX}${id}`) selectCategory('All')
+                          }}
+                          isLast={index === goalsList.length - 1}
+                        />
+                      ))}
+                    </SortableContext>
+                  )}
+                </div>
+              )}
+              {/* Completed missions — תמיד מחוץ לתיקייה, לא בתוך General. */}
               <div className="border-t border-gray-700 pt-1">
                 <button
                   type="button"
-                  onClick={() => setSelectedCategoryFilter(COMPLETED_MISSIONS_FILTER)}
+                  onClick={() => selectCategory(COMPLETED_MISSIONS_FILTER)}
                   className={`w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
                     selectedCategoryFilter === COMPLETED_MISSIONS_FILTER
                       ? 'bg-emerald-600/80 text-white'
@@ -1307,7 +1507,7 @@ export default function MyMissions() {
                       <DragHandleIcon className="h-3.5 w-3" />
                     </span>
                     <span className="flex-1 rounded-lg px-2 py-2 text-sm font-medium text-white">
-                      {activeCategory}
+                      {getGoalById(activeCategory)?.title ?? activeCategory}
                     </span>
                   </div>
                 ) : null}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useCurrency } from '../contexts/CurrencyContext'
 import type { TaskSummary, BudgetSummary } from '../types'
 import { getRandomQuoteForPage } from '../utils/quotes'
 
@@ -26,6 +27,7 @@ const budgetSummary: BudgetSummary = {
  * - מצבי "ריק" (Empty States) שמסבירים שאין עדיין מידע
  */
 export default function Dashboard() {
+  const { formatMoney } = useCurrency()
   const [motivationQuote] = useState(() => getRandomQuoteForPage('general'))
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
@@ -78,8 +80,8 @@ export default function Dashboard() {
             </svg>
           </div>
           <p className="mt-2 text-sm text-gray-400">Surplus</p>
-          <p className="text-sm text-emerald-300">Income: ${budgetSummary.incomeTotal}</p>
-          <p className="text-sm text-red-400">Expenses: ${budgetSummary.expensesTotal}</p>
+          <p className="text-sm text-emerald-300">Income: {formatMoney(budgetSummary.incomeTotal)}</p>
+          <p className="text-sm text-red-400">Expenses: {formatMoney(budgetSummary.expensesTotal)}</p>
           <Link to="/budget" className="mt-2 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
         </div>
 

@@ -1,2 +1,7 @@
 # תיקיית התלויות של Node (כבדה ולא אמורה להיכנס לגיט)
 node_modules/
+
+# Build output and IDE/build cache
+dist/
+tsconfig.tsbuildinfo
+.cursor/

@@ -48,7 +48,48 @@ export interface TaskSummary {
 
 // ============ BUDGET ============
 /**
+ * Budget category with optional icon/color and planned budget.
+ */
+export interface BudgetCategory {
+  id: string
+  name: string
+  icon?: string
+  color?: string
+  budget: number
+}
+
+/**
+ * Single transaction (income or expense).
+ */
+export interface BudgetTransaction {
+  id: string
+  type: 'income' | 'expense'
+  amount: number
+  categoryId: string
+  description?: string
+  date: string
+  /**
+   * Used for stable ordering when multiple transactions share the same date.
+   * Stored as epoch milliseconds.
+   */
+  createdAt?: number
+}
+
+/**
+ * Budget for a time period with categories and transactions.
+ */
+export interface Budget {
+  id: string
+  name: string
+  startDate: string
+  endDate: string
+  categories: BudgetCategory[]
+  transactions: BudgetTransaction[]
+}
+
+/**
  * BudgetItem = רשומה אחת בתקציב (הכנסה או הוצאה).
+ * @deprecated Prefer BudgetTransaction for new code.
  */
 export interface BudgetItem {
   id: string
@@ -64,7 +105,6 @@ export interface BudgetItem {
 
 /**
  * BudgetSummary = סיכום מספרי שמוצג למעלה בעמוד התקציב.
- * (בפרויקט הזה כרגע זה נתון קבוע לדוגמה.)
  */
 export interface BudgetSummary {
   incomeTotal: number
