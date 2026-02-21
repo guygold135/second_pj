@@ -5,3 +5,8 @@ node_modules/
 dist/
 tsconfig.tsbuildinfo
 .cursor/
+
+# Environment (keys / secrets)
+.env
+.env.local
+.env.*.local
