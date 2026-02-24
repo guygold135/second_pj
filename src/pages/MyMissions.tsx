@@ -20,12 +20,17 @@ import { CSS } from '@dnd-kit/utilities'
 import { useGoals } from '../contexts/GoalsContext'
 import { useMissions, GOAL_FILTER_PREFIX, type Mission, type Recurrence } from '../contexts/MissionsContext'
 import { getRandomQuoteForPage } from '../utils/quotes'
+import { StakeSetupModal, StakeBadge, type StakeInfo } from '../components/StakeSetupModal'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 /** שם התיקייה בסרגל — לא קטגוריה לבחירה, רק כותרת לתיקייה. */
 const CATEGORIES_FOLDER_NAME = 'General'
 /** תיקיית "Goals" בסרגל — כותרת בלבד, כמו General. */
 const GOALS_FOLDER_NAME = 'Goals'
 /** מסנן מיוחד בסרגל — מציג רק משימות שהושלמו; לא קטגוריה אמיתית ולא מופיע בבורר קטגוריה בטופס. */
 const COMPLETED_MISSIONS_FILTER = 'Completed missions'
+/** מסנן — משימות שחויבו (לא בוצעו, stake status = charged). */
+const UNCOMPLETED_MISSIONS_FILTER = 'Uncompleted missions'
 /** אייקון ידית גרירה: שתי עמודות של שלוש נקודות (2x3). */
 function DragHandleIcon({ className }: { className?: string }) {
   return (
@@ -214,12 +219,20 @@ function SortableMissionCard({
   onDelete,
   onEdit,
   getGoalById,
+  stake,
+  onAddStake,
+  onStakeSuccess,
+  onStakeFailure,
 }: {
   mission: Mission
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onEdit: (mission: Mission) => void
   getGoalById?: (id: string) => { title: string } | undefined
+  stake?: StakeInfo | null
+  onAddStake?: () => void
+  onStakeSuccess?: () => void
+  onStakeFailure?: () => void
 }) {
   const categoryLabel =
     mission.category.startsWith(GOAL_FILTER_PREFIX) && getGoalById
@@ -310,6 +323,23 @@ function SortableMissionCard({
         >
           {mission.isCompleted ? 'Completed' : mission.recurrence !== 'none' ? mission.recurrence : 'One-time'}
         </span>
+        {!mission.isCompleted && stake != null && stake.status !== 'cancelled' && stake.status !== 'pending_card' && (
+          <StakeBadge
+            stake={stake}
+            onReportSuccess={onStakeSuccess ?? (() => {})}
+            onReportFailure={onStakeFailure ?? (() => {})}
+          />
+        )}
+        {!mission.isCompleted && (stake == null || stake.status === 'cancelled' || stake.status === 'pending_card') && (
+          <button
+            type="button"
+            onClick={onAddStake}
+            className="rounded-lg border border-dashed border-amber-500/60 px-2.5 py-1 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/10 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+            aria-label="Add stake"
+          >
+            💰 Stake
+          </button>
+        )}
         {!mission.isCompleted && (
           <button
             type="button"
@@ -504,6 +534,10 @@ export default function MyMissions() {
   const [completedRecurrenceFilter, setCompletedRecurrenceFilter] = useState<'all' | Recurrence>('all')
   const completedDateFromRef = useRef<HTMLInputElement>(null)
   const completedDateToRef = useRef<HTMLInputElement>(null)
+  const [stakeModalForId, setStakeModalForId] = useState<string | null>(null)
+  const [stakes, setStakes] = useState<Record<string, StakeInfo>>({})
+  const [chargeSuccessMessage, setChargeSuccessMessage] = useState<string | null>(null)
+  const { user, session } = useAuth()
 
   const closeAddMissionFormAndReset = useCallback(() => {
     setShowAddMissionForm(false)
@@ -554,6 +588,34 @@ export default function MyMissions() {
       document.body.style.userSelect = prev
     }
   }, [activeMissionId])
+
+  // טעינת stakes מהטבלה stakes ב-Supabase (item_type = mission, user_id = current user)
+  useEffect(() => {
+    const client = supabase
+    if (!user?.id || !client) return
+    const load = async () => {
+      const { data: rows, error } = await client
+        .from('stakes')
+        .select('id, amount, currency, due_date, failure_mode, status, item_id')
+        .eq('user_id', user.id)
+        .eq('item_type', 'mission')
+      if (error) return
+      const map: Record<string, StakeInfo> = {}
+      for (const row of rows ?? []) {
+        const itemId = row.item_id as string
+        map[itemId] = {
+          stakeId: row.id as string,
+          amount: Number(row.amount),
+          currency: (row.currency as string) ?? 'usd',
+          dueDate: row.due_date ? new Date(row.due_date as string).toISOString().slice(0, 10) : '',
+          failureMode: (row.failure_mode as StakeInfo['failureMode']) ?? 'both',
+          status: (row.status as StakeInfo['status']) ?? 'pending_card',
+        }
+      }
+      setStakes(map)
+    }
+    load()
+  }, [user?.id])
 
   // סדר קטגוריות לתצוגה/מיון — כולל "General", קטגוריות רגילות, ויעדים (Goals) כדי שיופיעו ב־All.
   const categoryOrderForData = useMemo(
@@ -666,21 +728,34 @@ export default function MyMissions() {
       .map((cat) => ({ category: cat, missions: byCategory.get(cat)! }))
   }, [completedMissionsFiltered, completedCategoryFilter, categoryOrderForData])
 
-  // רשימה לסינון: All / קטגוריה / goal:id = רק משימות שלא הושלמו; "Completed missions" = רק הושלמו.
+  // משימות שחויבו (stake status = charged) — מוצגות רק ב־"Uncompleted missions".
+  const uncompletedMissions = useMemo(
+    () => missionsForDisplay.filter((m) => stakes[m.id]?.status === 'charged'),
+    [missionsForDisplay, stakes]
+  )
+
+  // משימות "פעילות" בקטגוריות: לא הושלמו ולא חויבו — כך שהקטגוריה המקורית לא תציג משימות שעברו ל־Completed/Uncompleted.
+  const activeMissionsInCategories = useMemo(
+    () => missionsForDisplay.filter((m) => !m.isCompleted && stakes[m.id]?.status !== 'charged'),
+    [missionsForDisplay, stakes]
+  )
+
+  // רשימה לסינון: All / קטגוריה / goal:id = רק משימות פעילות (לא הושלמו ולא חויבו); "Completed missions" = רק הושלמו; "Uncompleted missions" = חויבו.
   const displayedMissions = useMemo(() => {
     if (selectedCategoryFilter === COMPLETED_MISSIONS_FILTER) return completedMissionsFiltered
-    if (selectedCategoryFilter === 'All') return missionsForDisplay.filter((m) => !m.isCompleted)
+    if (selectedCategoryFilter === UNCOMPLETED_MISSIONS_FILTER) return uncompletedMissions
+    if (selectedCategoryFilter === 'All') return activeMissionsInCategories
     if (selectedCategoryFilter.startsWith(GOAL_FILTER_PREFIX)) {
       const goalId = selectedCategoryFilter.slice(GOAL_FILTER_PREFIX.length)
-      return missionsForDisplay.filter((m) => !m.isCompleted && m.goalId === goalId)
+      return activeMissionsInCategories.filter((m) => m.goalId === goalId)
     }
-    return missionsForDisplay.filter((m) => m.category === selectedCategoryFilter && !m.isCompleted)
-  }, [missionsForDisplay, selectedCategoryFilter, completedMissionsFiltered])
+    return activeMissionsInCategories.filter((m) => m.category === selectedCategoryFilter)
+  }, [selectedCategoryFilter, completedMissionsFiltered, uncompletedMissions, activeMissionsInCategories])
 
-  // כשמציגים "All": קיבוץ משימות שלא הושלמו לפי קטגוריה; משימות שהושלמו מוצגות רק ב־"Completed missions".
+  // כשמציגים "All": קיבוץ משימות פעילות לפי קטגוריה (ללא הושלמו וללא חויבו).
   const missionsGroupedByCategory = useMemo(() => {
     if (selectedCategoryFilter !== 'All') return null
-    const activeOnly = missionsForDisplay.filter((m) => !m.isCompleted)
+    const activeOnly = activeMissionsInCategories
     const byCategory = new Map<string, Mission[]>()
     for (const m of activeOnly) {
       const list = byCategory.get(m.category) ?? []
@@ -690,7 +765,7 @@ export default function MyMissions() {
     return categoryOrderForData
       .filter((cat) => (byCategory.get(cat)?.length ?? 0) > 0)
       .map((cat) => ({ category: cat, missions: byCategory.get(cat)! }))
-  }, [missionsForDisplay, selectedCategoryFilter, categoryOrderForData])
+  }, [activeMissionsInCategories, selectedCategoryFilter, categoryOrderForData])
 
   // הוספת משימה חדשה או שמירת עריכה — משימה משתנה רק אחרי לחיצה כאן. קטגוריה חייבת להיות תקפה (לא "Choose category").
   const handleAdd = () => {
@@ -777,6 +852,63 @@ export default function MyMissions() {
     setShowAddMissionForm(true)
   }
 
+  const stakeFunctionUrl =
+    (typeof import.meta.env.VITE_SUPABASE_URL === 'string' && import.meta.env.VITE_SUPABASE_URL
+      ? import.meta.env.VITE_SUPABASE_URL.replace(/\/$/, '')
+      : '') + '/functions/v1/stripe-stake'
+  const stakeToken = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY
+
+  const handleStakeAttached = useCallback((missionId: string, info: StakeInfo) => {
+    setStakes((prev) => ({ ...prev, [missionId]: info }))
+  }, [])
+
+  const handleStakeSuccess = useCallback(
+    async (missionId: string) => {
+      const stake = stakes[missionId]
+      if (!stake?.stakeId) return
+      try {
+        const res = await fetch(stakeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(stakeToken ? { Authorization: `Bearer ${stakeToken}` } : {}),
+          },
+          body: JSON.stringify({ action: 'succeed_stake', stakeId: stake.stakeId }),
+        })
+        if (res.ok) setStakes((prev) => ({ ...prev, [missionId]: { ...stake, status: 'succeeded' } }))
+      } catch {
+        // keep UI consistent on network error
+      }
+    },
+    [stakes, stakeFunctionUrl, stakeToken],
+  )
+
+  const handleStakeFailure = useCallback(
+    async (missionId: string) => {
+      const stake = stakes[missionId]
+      if (!stake?.stakeId) return
+      try {
+        const res = await fetch(stakeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(stakeToken ? { Authorization: `Bearer ${stakeToken}` } : {}),
+          },
+          body: JSON.stringify({ action: 'charge_stake', stakeId: stake.stakeId }),
+        })
+        if (res.ok) {
+          setStakes((prev) => ({ ...prev, [missionId]: { ...stake, status: 'charged' } }))
+          const msg = `Charged ${stake.amount} ${(stake.currency || 'usd').toUpperCase()} from your card. Check Stripe Dashboard → Payments to verify.`
+          setChargeSuccessMessage(msg)
+          setTimeout(() => setChargeSuccessMessage(null), 8000)
+        }
+      } catch {
+        // keep UI consistent on network error
+      }
+    },
+    [stakes, stakeFunctionUrl, stakeToken],
+  )
+
   /**
    * "סימון" משימה:
    * - אם אין targetCount: לחיצה אחת מסיימת (isCompleted=true)
@@ -823,8 +955,8 @@ export default function MyMissions() {
     }
 
     if (!sameCategory) {
-      // "Completed missions" הוא מסנן בלבד — לא מעבירים משימה לקטגוריה זו.
-      if (targetCategory === COMPLETED_MISSIONS_FILTER || !categoriesOrder.includes(targetCategory)) return
+      // "Completed missions" / "Uncompleted missions" הם מסננים בלבד — לא מעבירים משימה לקטגוריה.
+      if (targetCategory === COMPLETED_MISSIONS_FILTER || targetCategory === UNCOMPLETED_MISSIONS_FILTER || !categoriesOrder.includes(targetCategory)) return
       // מעבר לקטגוריה אחרת — הכנסה במיקום השחרור (או בסוף אם שחרור על האזור)
       setMissions((prev) => {
         const byCat = new Map<string, Mission[]>()
@@ -862,7 +994,7 @@ export default function MyMissions() {
 
   const submitNewCategory = () => {
     const name = newCategoryName.trim()
-    if (!name || name === 'All' || name === COMPLETED_MISSIONS_FILTER || name === CATEGORIES_FOLDER_NAME) return
+    if (!name || name === 'All' || name === COMPLETED_MISSIONS_FILTER || name === UNCOMPLETED_MISSIONS_FILTER || name === CATEGORIES_FOLDER_NAME) return
     if (categoriesOrder.some((c) => c.toLowerCase() === name.toLowerCase())) {
       setNewCategoryName('')
       setIsAddingCategory(false)
@@ -931,13 +1063,13 @@ export default function MyMissions() {
         <div className="min-w-0 flex-1 space-y-6">
 
       {/* אזור יצירת משימה חדשה — לא מוצג ב־"Completed missions" (רק צפייה במשימות שהושלמו) */}
-      {selectedCategoryFilter !== COMPLETED_MISSIONS_FILTER && (!showAddMissionForm ? (
+      {selectedCategoryFilter !== COMPLETED_MISSIONS_FILTER && selectedCategoryFilter !== UNCOMPLETED_MISSIONS_FILTER && (!showAddMissionForm ? (
         <div className="rounded-2xl bg-slate-900/60">
           <button
             type="button"
             onClick={() => {
               setEditingMissionId(null)
-              if (selectedCategoryFilter !== 'All' && selectedCategoryFilter !== COMPLETED_MISSIONS_FILTER) {
+              if (selectedCategoryFilter !== 'All' && selectedCategoryFilter !== COMPLETED_MISSIONS_FILTER && selectedCategoryFilter !== UNCOMPLETED_MISSIONS_FILTER) {
                 setNewCategory(selectedCategoryFilter)
               } else {
                 setNewCategory('')
@@ -1195,19 +1327,21 @@ export default function MyMissions() {
               ? 'No active missions yet. Create one above to get started!'
               : selectedCategoryFilter === COMPLETED_MISSIONS_FILTER
                 ? 'No completed missions yet.'
-                : selectedCategoryFilter.startsWith(GOAL_FILTER_PREFIX)
-                  ? `No missions for ${getGoalById(selectedCategoryFilter.slice(GOAL_FILTER_PREFIX.length))?.title ?? 'this goal'} yet. Create one above or choose another goal.`
-                  : `No missions in ${selectedCategoryFilter} yet. Create one above or choose another category.`}
+                : selectedCategoryFilter === UNCOMPLETED_MISSIONS_FILTER
+                  ? 'No uncompleted (charged) missions yet.'
+                  : selectedCategoryFilter.startsWith(GOAL_FILTER_PREFIX)
+                    ? `No missions for ${getGoalById(selectedCategoryFilter.slice(GOAL_FILTER_PREFIX.length))?.title ?? 'this goal'} yet. Create one above or choose another goal.`
+                    : `No missions in ${selectedCategoryFilter} yet. Create one above or choose another category.`}
           </p>
         </div>
       ) : (
-      /*
-        גרירת משימות — מאוחדת עם לוגיקת הקטגוריות (Category drag) לעקביות:
-        - אותם חיישנים, collisionDetection (closestCenter), verticalListSortingStrategy — תנועה רציפה בין קבוצות.
-        - כל קבוצת קטגוריה היא SortableContext; פריטים גולשים (layout animation) בלבד.
-        - user-select: none במהלך גרירה — מונע הדגשת טקסט כחולה.
-      */
-      <DndContext
+      <>
+        {chargeSuccessMessage && (
+          <div className="mb-4 rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            {chargeSuccessMessage}
+          </div>
+        )}
+        <DndContext
         sensors={sensors}
         collisionDetection={missionCollisionDetection}
         modifiers={missionModifiers}
@@ -1236,6 +1370,10 @@ export default function MyMissions() {
                         onDelete={handleDelete}
                         onEdit={handleEdit}
                         getGoalById={getGoalById}
+                        stake={stakes[mission.id] ?? null}
+                        onAddStake={() => setStakeModalForId(mission.id)}
+                        onStakeSuccess={() => { handleStakeSuccess(mission.id); handleToggle(mission.id); }}
+                        onStakeFailure={() => handleStakeFailure(mission.id)}
                       />
                     ))}
                   </SortableContext>
@@ -1254,6 +1392,10 @@ export default function MyMissions() {
                   onDelete={handleDelete}
                   onEdit={handleEdit}
                   getGoalById={getGoalById}
+                  stake={stakes[mission.id] ?? null}
+                  onAddStake={() => setStakeModalForId(mission.id)}
+                  onStakeSuccess={() => { handleStakeSuccess(mission.id); handleToggle(mission.id); }}
+                  onStakeFailure={() => handleStakeFailure(mission.id)}
                 />
               ))}
             </SortableContext>
@@ -1294,6 +1436,7 @@ export default function MyMissions() {
           })() : null}
         </DragOverlay>
       </DndContext>
+      </>
       )}
         </div>
 
@@ -1493,6 +1636,17 @@ export default function MyMissions() {
                 >
                   Completed missions
                 </button>
+                <button
+                  type="button"
+                  onClick={() => selectCategory(UNCOMPLETED_MISSIONS_FILTER)}
+                  className={`mt-0.5 w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
+                    selectedCategoryFilter === UNCOMPLETED_MISSIONS_FILTER
+                      ? 'bg-red-600/80 text-white'
+                      : 'text-red-400 hover:bg-slate-800 hover:text-red-300'
+                  }`}
+                >
+                  Uncompleted missions
+                </button>
               </div>
               <DragOverlay
                 dropAnimation={{
@@ -1517,6 +1671,21 @@ export default function MyMissions() {
         </nav>
         </aside>
       </div>
+      {stakeModalForId && (() => {
+        const m = missions.find((x) => x.id === stakeModalForId)
+        return m ? (
+          <StakeSetupModal
+            itemId={m.id}
+            itemTitle={m.title}
+            itemType="mission"
+            onClose={() => setStakeModalForId(null)}
+            onStaked={(info) => {
+              handleStakeAttached(m.id, info)
+              setStakeModalForId(null)
+            }}
+          />
+        ) : null
+      })()}
     </div>
   )
 }

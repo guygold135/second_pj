@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 
 // רשימת קישורים לתפריט העליון.
 // כל אובייקט אומר:
@@ -10,8 +12,6 @@ const navLinks = [
   { to: '/my-missions', label: 'MY MISSIONS' },
   { to: '/goals', label: 'GOALS' },
   { to: '/budget', label: 'BUDGET' },
-  { to: '/investment', label: 'INVESTMENT' },
-  { to: '/contract', label: 'CONTRACT' },
   { to: '/settings', label: 'SETTINGS' },
 ]
 
@@ -32,9 +32,14 @@ const rightLinks = navLinks.filter((link) => link.to === '/settings')
  * הוא סוג של "חלון" שבתוכו React Router שם את העמוד המתאים לפי ה-URL.
  */
 export default function Layout() {
-  // useLocation נותן לנו לדעת מה ה-URL הנוכחי,
-  // כדי שנוכל לסמן בתפריט איזה קישור הוא "פעיל" כרגע.
   const location = useLocation()
+  const { signOut, user } = useAuth()
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+
+  const handleSignOut = () => {
+    setShowSignOutConfirm(false)
+    signOut()
+  }
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white">
@@ -74,11 +79,58 @@ export default function Layout() {
               })}
             </div>
           </nav>
-          <button className="rounded-full border border-gray-500 px-4 py-1 text-xs font-semibold uppercase tracking-wider text-gray-300 hover:border-gray-300 hover:text-white">
-            Get Started Free
-          </button>
+          <div className="flex items-center gap-3">
+            {user?.email && (
+              <span className="max-w-[140px] truncate text-xs text-gray-400 sm:max-w-[200px]" title={user.email}>
+                {user.email}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowSignOutConfirm(true)}
+              className="rounded-full border border-gray-500 px-4 py-1 text-xs font-semibold uppercase tracking-wider text-gray-300 hover:border-gray-300 hover:text-white"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
+
+      {/* Are you sure? sign out confirmation */}
+      {showSignOutConfirm && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowSignOutConfirm(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="signout-title"
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-gray-700 bg-slate-800 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p id="signout-title" className="text-center font-medium text-white">
+              Are you sure you want to sign out?
+            </p>
+            <div className="mt-4 flex justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowSignOutConfirm(false)}
+                className="rounded-lg border border-gray-500 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* פה נטען התוכן של העמוד הנוכחי */}
       <main className="bg-[#0f172a] pb-10 pt-6 text-white sm:px-6 lg:px-8 px-4">
         <Outlet />

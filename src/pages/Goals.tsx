@@ -3,6 +3,9 @@ import { useGoals, type Goal, type GoalTrackingMode } from '../contexts/GoalsCon
 import { useMissions, GOAL_FILTER_PREFIX, type Mission, type Recurrence } from '../contexts/MissionsContext'
 import { getRandomQuoteForPage } from '../utils/quotes'
 import { v4 as uuidv4 } from 'uuid'
+import { StakeSetupModal, StakeBadge, type StakeInfo } from '../components/StakeSetupModal'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 function GoalIcon({ mode }: { mode?: GoalTrackingMode }) {
   const m = mode ?? 'missions_equal'
@@ -281,6 +284,10 @@ export default function Goals() {
   // Time tracking: live timer (one at a time)
   const [activeTimer, setActiveTimer] = useState<{ goalId: string; startTime: number; elapsedSeconds: number } | null>(null)
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [stakeModalForGoalId, setStakeModalForGoalId] = useState<string | null>(null)
+  const [goalStakes, setGoalStakes] = useState<Record<string, StakeInfo>>({})
+  const [chargeSuccessMessage, setChargeSuccessMessage] = useState<string | null>(null)
+  const { user, session } = useAuth()
 
   const [addGoalTitleError, setAddGoalTitleError] = useState(false)
 
@@ -376,6 +383,91 @@ export default function Goals() {
       setUpdateCountInput('')
     },
     [goals, updateCountInput, updateGoal],
+  )
+
+  // Load goal stakes from Supabase (item_type = 'goal', user_id = current user)
+  useEffect(() => {
+    const client = supabase
+    if (!user?.id || !client) return
+    const load = async () => {
+      const { data: rows, error } = await client
+        .from('stakes')
+        .select('id, amount, currency, due_date, failure_mode, status, item_id')
+        .eq('user_id', user.id)
+        .eq('item_type', 'goal')
+      if (error) return
+      const map: Record<string, StakeInfo> = {}
+      for (const row of rows ?? []) {
+        const itemId = row.item_id as string
+        map[itemId] = {
+          stakeId: row.id as string,
+          amount: Number(row.amount),
+          currency: (row.currency as string) ?? 'usd',
+          dueDate: row.due_date ? new Date(row.due_date as string).toISOString().slice(0, 10) : '',
+          failureMode: (row.failure_mode as StakeInfo['failureMode']) ?? 'both',
+          status: (row.status as StakeInfo['status']) ?? 'pending_card',
+        }
+      }
+      setGoalStakes(map)
+    }
+    load()
+  }, [user?.id])
+
+  const stakeFunctionUrl =
+    (typeof import.meta.env.VITE_SUPABASE_URL === 'string' && import.meta.env.VITE_SUPABASE_URL
+      ? import.meta.env.VITE_SUPABASE_URL.replace(/\/$/, '')
+      : '') + '/functions/v1/stripe-stake'
+  const stakeToken = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY
+
+  const handleGoalStakeAttached = useCallback((goalId: string, info: StakeInfo) => {
+    setGoalStakes((prev) => ({ ...prev, [goalId]: info }))
+  }, [])
+
+  const handleGoalStakeSuccess = useCallback(
+    async (goalId: string) => {
+      const stake = goalStakes[goalId]
+      if (!stake?.stakeId) return
+      try {
+        const res = await fetch(stakeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(stakeToken ? { Authorization: `Bearer ${stakeToken}` } : {}),
+          },
+          body: JSON.stringify({ action: 'succeed_stake', stakeId: stake.stakeId }),
+        })
+        if (res.ok) setGoalStakes((prev) => ({ ...prev, [goalId]: { ...stake, status: 'succeeded' } }))
+      } catch {
+        // keep UI consistent on network error
+      }
+    },
+    [goalStakes, stakeFunctionUrl, stakeToken],
+  )
+
+  const handleGoalStakeFailure = useCallback(
+    async (goalId: string) => {
+      const stake = goalStakes[goalId]
+      if (!stake?.stakeId) return
+      try {
+        const res = await fetch(stakeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(stakeToken ? { Authorization: `Bearer ${stakeToken}` } : {}),
+          },
+          body: JSON.stringify({ action: 'charge_stake', stakeId: stake.stakeId }),
+        })
+        if (res.ok) {
+          setGoalStakes((prev) => ({ ...prev, [goalId]: { ...stake, status: 'charged' } }))
+          const msg = `Charged ${stake.amount} ${(stake.currency || 'usd').toUpperCase()} from your card. Check Stripe Dashboard → Payments to verify.`
+          setChargeSuccessMessage(msg)
+          setTimeout(() => setChargeSuccessMessage(null), 8000)
+        }
+      } catch {
+        // keep UI consistent on network error
+      }
+    },
+    [goalStakes, stakeFunctionUrl, stakeToken],
   )
 
   const isWeighted = justAddedGoal?.trackingMode === 'missions_weighted'
@@ -1063,6 +1155,12 @@ export default function Goals() {
             </div>
           </div>
         ) : goals.length > 0 ? (
+          <>
+            {chargeSuccessMessage && (
+              <div className="mb-4 rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                {chargeSuccessMessage}
+              </div>
+            )}
           <ul className="grid w-full grid-cols-1 gap-4 px-4 text-left sm:grid-cols-2 lg:grid-cols-3">
             {goals.map((goal) => {
               const progress = getGoalProgressFromMissions(goal, missions)
@@ -1253,6 +1351,26 @@ export default function Goals() {
                       No missions yet
                     </div>
                   )}
+
+                  {/* Financial stake row */}
+                  <div className="mt-3 flex items-center border-t border-gray-800 pt-3">
+                    {goalStakes[goal.id] != null && goalStakes[goal.id].status !== 'cancelled' && goalStakes[goal.id].status !== 'pending_card' ? (
+                      <StakeBadge
+                        stake={goalStakes[goal.id]}
+                        onReportSuccess={() => handleGoalStakeSuccess(goal.id)}
+                        onReportFailure={() => handleGoalStakeFailure(goal.id)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setStakeModalForGoalId(goal.id)}
+                        className="rounded-lg border border-dashed border-amber-500/60 px-2.5 py-1 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/10 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                        aria-label="Add financial stake"
+                      >
+                        💰 Add financial stake
+                      </button>
+                    )}
+                  </div>
                 </div>
                 
                 {/* Delete Button */}
@@ -1271,6 +1389,7 @@ export default function Goals() {
             );
             })}
           </ul>
+          </>
         ) : (
           <>
             <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-slate-800">
@@ -1417,6 +1536,21 @@ export default function Goals() {
           </div>
         </div>
       )}
+      {stakeModalForGoalId && (() => {
+        const g = goals.find((x) => x.id === stakeModalForGoalId)
+        return g ? (
+          <StakeSetupModal
+            itemId={g.id}
+            itemTitle={g.title}
+            itemType="goal"
+            onClose={() => setStakeModalForGoalId(null)}
+            onStaked={(info) => {
+              handleGoalStakeAttached(g.id, info)
+              setStakeModalForGoalId(null)
+            }}
+          />
+        ) : null
+      })()}
     </div>
   )
 }

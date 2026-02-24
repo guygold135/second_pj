@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Budget, BudgetCategory, BudgetTransaction } from '../types'
 import { getRandomQuoteForPage } from '../utils/quotes'
 import { buildDefaultCategories } from '../components/budget/defaultCategories'
 import { useCurrency } from '../contexts/CurrencyContext'
+import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import {
   getMonthStartEnd,
   getQuarterStartEnd,
@@ -23,8 +25,14 @@ import { CategoryCard } from '../components/budget/CategoryCard'
 import { TransactionForm } from '../components/budget/TransactionForm'
 import { TransactionList } from '../components/budget/TransactionList'
 import { CategoryManager } from '../components/budget/CategoryManager'
+import OpportunityCost, {
+  getBlendedRateAndHorizon,
+  compoundGrowth,
+  type OpportunityCostSaved,
+} from './OpportunityCost'
 
 const STORAGE_KEY = 'budget_app_data'
+const STORAGE_KEY_OPPORTUNITY = 'opportunity_cost_data'
 
 type PeriodType = 'month' | 'quarter' | 'year'
 
@@ -44,7 +52,7 @@ function normalizeBudget(b: Budget): Budget {
   return { ...b, categories: (b.categories ?? []).map(normalizeCategoryBudget) }
 }
 
-function loadBudgets(): { budgets: Budget[]; currentId: string } {
+function loadFromLocalStorage(): { budgets: Budget[]; currentId: string } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { budgets: [], currentId: '' }
@@ -56,7 +64,7 @@ function loadBudgets(): { budgets: Budget[]; currentId: string } {
   }
 }
 
-function saveBudgets(budgets: Budget[], currentId: string) {
+function saveToLocalStorage(budgets: Budget[], currentId: string) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ budgets, currentId }))
   } catch (_) {}
@@ -74,6 +82,7 @@ function createBudgetForRange(start: string, end: string, createId: () => string
 }
 
 export default function Budget() {
+  const { user } = useAuth()
   const { formatMoney } = useCurrency()
   const [motivationQuote] = useState(() => getRandomQuoteForPage('finance'))
   const [budgets, setBudgets] = useState<Budget[]>([])
@@ -85,7 +94,11 @@ export default function Budget() {
   const [editingTransaction, setEditingTransaction] = useState<BudgetTransaction | null>(null)
   const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [showInvestmentProfileModal, setShowInvestmentProfileModal] = useState(false)
+  const [opportunityCostSaved, setOpportunityCostSaved] = useState<OpportunityCostSaved | null>(null)
   const transactionFormRef = useRef<HTMLElement | null>(null)
+  const hasLoadedRef = useRef(false)
+  const prevModalOpenRef = useRef(false)
 
   const currentBudget = budgets.find((b) => b.id === currentId)
   const summary = currentBudget ? computeSummary(currentBudget.transactions) : { incomeTotal: 0, expensesTotal: 0, surplus: 0 }
@@ -102,40 +115,150 @@ export default function Budget() {
           .sort((a, b) => b.spentAmount - a.spentAmount)
       : []
 
+  // Load from Supabase or localStorage on mount
   useEffect(() => {
-    const { budgets: loaded, currentId: loadedId } = loadBudgets()
-    if (loaded.length > 0 && loadedId && loaded.some((b) => b.id === loadedId)) {
-      setBudgets(loaded)
-      setCurrentId(loadedId)
-      const b = loaded.find((x) => x.id === loadedId)!
-      setPeriodStart(b.startDate)
-      setPeriodEnd(b.endDate)
-      return
+    let cancelled = false
+    const run = async () => {
+      if (supabase && user) {
+        try {
+          if (import.meta.env.DEV) console.log('[Budget] Loading from Supabase...')
+          const { data, error } = await supabase
+            .from('budget_data')
+            .select('current_id, budgets')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (cancelled) return
+          if (error) throw error
+          if (data != null && Array.isArray(data.budgets)) {
+            const loaded = (data.budgets as Budget[]).map(stripIncomeCategory).map(normalizeBudget)
+            const loadedId = (data.current_id as string) ?? ''
+            setBudgets(loaded)
+            setCurrentId(loadedId || (loaded[0]?.id ?? ''))
+            if (loaded.length > 0 && loadedId && loaded.some((b) => b.id === loadedId)) {
+              const b = loaded.find((x) => x.id === loadedId)!
+              setPeriodStart(b.startDate)
+              setPeriodEnd(b.endDate)
+            } else if (loaded[0]) {
+              setPeriodStart(loaded[0].startDate)
+              setPeriodEnd(loaded[0].endDate)
+            }
+            if (!cancelled) setTimeout(() => { hasLoadedRef.current = true }, 0)
+            return
+          }
+        } catch (e) {
+          if (import.meta.env.DEV) console.error('[Budget] Load from Supabase failed:', e)
+        }
+      }
+      if (!cancelled) {
+        const { budgets: loaded, currentId: loadedId } = loadFromLocalStorage()
+        if (loaded.length > 0 && loadedId && loaded.some((b) => b.id === loadedId)) {
+          setBudgets(loaded)
+          setCurrentId(loadedId)
+          const b = loaded.find((x) => x.id === loadedId)!
+          setPeriodStart(b.startDate)
+          setPeriodEnd(b.endDate)
+        } else {
+          setBudgets(loaded)
+          const now = new Date()
+          const r =
+            periodType === 'month'
+              ? getMonthStartEnd(now)
+              : periodType === 'quarter'
+                ? getQuarterStartEnd(now)
+                : getYearStartEnd(now)
+          const start = r.start
+          const end = r.end
+          setPeriodStart(start)
+          setPeriodEnd(end)
+          const existing = loaded.find((b) => b.startDate === start && b.endDate === end)
+          if (existing) setCurrentId(existing.id)
+          else {
+            const newBudget = createBudgetForRange(start, end, () => uuidv4())
+            setBudgets((prev) => [...prev, newBudget])
+            setCurrentId(newBudget.id)
+          }
+        }
+        setTimeout(() => { hasLoadedRef.current = true }, 0)
+      }
     }
-    setBudgets(loaded)
-    const now = new Date()
-    const r =
-      periodType === 'month'
-        ? getMonthStartEnd(now)
-        : periodType === 'quarter'
-          ? getQuarterStartEnd(now)
-          : getYearStartEnd(now)
-    const start = r.start
-    const end = r.end
-    setPeriodStart(start)
-    setPeriodEnd(end)
-    const existing = loaded.find((b) => b.startDate === start && b.endDate === end)
-    if (existing) setCurrentId(existing.id)
-    else {
-      const newBudget = createBudgetForRange(start, end, () => uuidv4())
-      setBudgets((prev) => [...prev, newBudget])
-      setCurrentId(newBudget.id)
+    run()
+    return () => { cancelled = true }
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- init when user changes
+
+  const loadOpportunityCost = useCallback(async () => {
+    if (supabase && user) {
+      try {
+        const { data } = await supabase
+          .from('user_settings')
+          .select('opportunity_cost')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (data?.opportunity_cost && typeof data.opportunity_cost === 'object') {
+          setOpportunityCostSaved(data.opportunity_cost as OpportunityCostSaved)
+          return
+        }
+      } catch (_) {}
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- init once
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_OPPORTUNITY)
+      if (raw) {
+        const oc = JSON.parse(raw) as OpportunityCostSaved
+        setOpportunityCostSaved(oc)
+      } else {
+        setOpportunityCostSaved(null)
+      }
+    } catch (_) {
+      setOpportunityCostSaved(null)
+    }
+  }, [user?.id])
 
   useEffect(() => {
-    if (budgets.length > 0 && currentId) saveBudgets(budgets, currentId)
-  }, [budgets, currentId])
+    loadOpportunityCost()
+  }, [loadOpportunityCost])
+
+  useEffect(() => {
+    if (prevModalOpenRef.current && !showInvestmentProfileModal) {
+      loadOpportunityCost()
+    }
+    prevModalOpenRef.current = showInvestmentProfileModal
+  }, [showInvestmentProfileModal, loadOpportunityCost])
+
+  // Persist to Supabase or localStorage on change (after initial load)
+  useEffect(() => {
+    if (!hasLoadedRef.current) return
+    if (supabase && !user) return
+
+    const client = supabase
+    if (client && user) {
+      const save = async () => {
+        try {
+          const userId = user.id
+          if (import.meta.env.DEV) console.log('[Budget] Writing to Supabase:', budgets.length, 'budgets')
+          const { error: upsertError } = await client
+            .from('budget_data')
+            .upsert(
+              { id: userId, current_id: currentId, budgets, user_id: userId },
+              { onConflict: 'id' }
+            )
+          if (upsertError) throw upsertError
+          if (import.meta.env.DEV) console.log('[Budget] Supabase: budget_data upsert OK')
+          const { data: existing } = await client.from('budget_data').select('id').eq('user_id', userId)
+          const toDelete = (existing ?? []).filter((r: { id: string }) => r.id !== userId).map((r: { id: string }) => r.id)
+          if (toDelete.length > 0) {
+            const { error: deleteError } = await client.from('budget_data').delete().in('id', toDelete)
+            if (deleteError) throw deleteError
+            if (import.meta.env.DEV) console.log('[Budget] Supabase: deleted', toDelete.length, 'stale row(s)')
+          }
+        } catch (e) {
+          console.error('[Budget] Save to Supabase failed:', e)
+        }
+      }
+      save()
+    } else {
+      if (import.meta.env.DEV) console.log('[Budget] Supabase not configured, saving to localStorage only')
+      saveToLocalStorage(budgets, currentId)
+    }
+  }, [budgets, currentId, user?.id])
 
   useEffect(() => {
     if (!showTransactionForm) return
@@ -296,6 +419,19 @@ export default function Budget() {
         </span>
       </div>
 
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setShowInvestmentProfileModal(true)}
+          className="rounded-lg border border-cyan-500/60 bg-slate-900 px-4 py-2 text-sm font-medium text-cyan-300 hover:bg-cyan-500/20 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+        >
+          Set my investment profile
+        </button>
+        <p className="text-sm text-gray-400">
+          We&apos;ll use this to show you the long-term impact of your spending.
+        </p>
+      </div>
+
       {/* Period selector */}
       <div className="flex flex-wrap items-center gap-2">
         <select
@@ -405,6 +541,41 @@ export default function Budget() {
             categorySegments={categorySegments}
           />
 
+          {isCurrentTimeframe && (() => {
+            const delta = totalBudget - summary.expensesTotal
+            const amount = Math.abs(delta)
+            if (amount < 0.01) return null
+            const isSurplus = delta > 0
+            const blend = getBlendedRateAndHorizon(opportunityCostSaved)
+            const projected = blend && amount > 0 ? compoundGrowth(amount, blend.rate, blend.horizonYears) : null
+            return (
+              <div className="rounded-xl border border-gray-800 bg-slate-900/50 p-4">
+                <p className="text-sm text-gray-300">
+                  {isSurplus ? (
+                    <>You&apos;re under budget by <span className="font-semibold text-emerald-400">{formatMoney(amount)}</span> this period.</>
+                  ) : (
+                    <>Overspend this period: <span className="font-semibold text-amber-400">{formatMoney(amount)}</span>.</>
+                  )}
+                </p>
+                {blend && projected != null && projected > 0 ? (
+                  <p className="mt-2 text-sm text-gray-300">
+                    If invested, this could grow to{' '}
+                    <span className="font-semibold text-cyan-400">{formatMoney(Math.round(projected))}</span>
+                    {' '}in {blend.horizonYears} years.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowInvestmentProfileModal(true)}
+                    className="mt-2 text-sm font-medium text-cyan-400 hover:text-cyan-300 hover:underline"
+                  >
+                    Set your investment profile to see the long-term impact
+                  </button>
+                )}
+              </div>
+            )
+          })()}
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -504,6 +675,38 @@ export default function Budget() {
       {!currentBudget && (
         <div className="rounded-xl border border-gray-800 bg-slate-900/40 py-12 text-center text-gray-400">
           Loading budget…
+        </div>
+      )}
+
+      {/* Investment profile modal */}
+      {showInvestmentProfileModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowInvestmentProfileModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="investment-profile-modal-title"
+        >
+          <div
+            className="flex max-h-[90vh] w-full max-w-[700px] flex-col rounded-xl border border-gray-800 bg-slate-900 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-800 bg-slate-900 px-4 py-3">
+              <h2 id="investment-profile-modal-title" className="text-lg font-semibold text-white">
+                My Investment Profile
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowInvestmentProfileModal(false)}
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-300 hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              >
+                Close
+              </button>
+            </div>
+            <div className="min-h-0 overflow-y-auto p-4 text-white">
+              <OpportunityCost embedded />
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -37,3 +37,11 @@ See `src/types/index.ts` for:
 ## Stack
 
 - React 18, React Router 6, TypeScript, Vite, Tailwind CSS 4, Recharts (investment chart)
+
+## Financial stakes (Stripe)
+
+Missions and goals can have an optional financial stake; if the user does not complete by the deadline, the card can be charged. See [docs/STRIPE_AND_CRON_SETUP.md](docs/STRIPE_AND_CRON_SETUP.md) for:
+
+- Edge Function secrets (`STRIPE_SECRET_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `CRON_SECRET`)
+- Using **live** Stripe keys and activating your account for real payouts
+- Scheduling **auto-charge by deadline** with pg_cron
