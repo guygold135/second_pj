@@ -1,10 +1,15 @@
 import { Component, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { loadingState } from './styles/designSystem'
 import { GoalsProvider } from './contexts/GoalsContext'
 import { MissionsProvider } from './contexts/MissionsContext'
 import { CurrencyProvider } from './contexts/CurrencyContext'
+import { BudgetProvider } from './contexts/BudgetContext'
+import { ToastProvider } from './components/Toast'
+import { EtherealShadow } from './components/ui/ethereal-shadow'
 import Layout from './components/Layout'
+import PublicLayout from './components/PublicLayout'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import MyMissions from './pages/MyMissions'
@@ -19,8 +24,9 @@ function ProtectedLayout() {
   const { user, isLoading } = useAuth()
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0f172a]">
-        <div className="text-lg text-gray-400">Loading…</div>
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#0f172a]">
+        <div className={loadingState.spinner} aria-hidden />
+        <span className={loadingState.inline}>Loading…</span>
       </div>
     )
   }
@@ -31,32 +37,14 @@ function ProtectedLayout() {
     <CurrencyProvider>
       <GoalsProvider>
         <MissionsProvider>
-          <Layout />
+          <BudgetProvider>
+            <ToastProvider>
+              <Layout />
+            </ToastProvider>
+          </BudgetProvider>
         </MissionsProvider>
       </GoalsProvider>
     </CurrencyProvider>
-  )
-}
-
-function AuthRoutes() {
-  const { user, isLoading } = useAuth()
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0f172a]">
-        <div className="text-lg text-gray-400">Loading…</div>
-      </div>
-    )
-  }
-  if (user) {
-    return <Navigate to="/" replace />
-  }
-  return (
-    <Routes>
-      <Route path="/signin" element={<SignIn />} />
-      <Route path="/signup" element={<SignUp />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="*" element={<Navigate to="/signin" replace />} />
-    </Routes>
   )
 }
 
@@ -64,27 +52,35 @@ function AppRoutes() {
   const { user, isLoading } = useAuth()
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0f172a]">
-        <div className="text-lg text-gray-400">Loading…</div>
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#0f172a]">
+        <div className={loadingState.spinner} aria-hidden />
+        <span className={loadingState.inline}>Loading…</span>
       </div>
     )
   }
   if (!user) {
-    return <AuthRoutes />;
+    return (
+      <Routes>
+        <Route path="/" element={<PublicLayout />}>
+          <Route index element={<Home />} />
+          <Route path="signin" element={<SignIn />} />
+          <Route path="signup" element={<SignUp />} />
+          <Route path="reset-password" element={<ResetPassword />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    )
   }
   return (
     <Routes>
       <Route path="/" element={<ProtectedLayout />}>
-        <Route index element={<Home />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="my-missions" element={<MyMissions />} />
         <Route path="goals" element={<Goals />} />
         <Route path="budget" element={<Budget />} />
         <Route path="settings" element={<Settings />} />
       </Route>
-      <Route path="/signin" element={<SignIn />} />
-      <Route path="/signup" element={<SignUp />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
@@ -107,13 +103,15 @@ class AppErrorBoundary extends Component<
   render() {
     if (this.state.hasError && this.state.error) {
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f172a] p-6 text-white">
-          <p className="mb-2 text-lg font-medium text-red-300">Something went wrong</p>
-          <p className="mb-4 max-w-md break-all text-sm text-gray-400">{this.state.error.message}</p>
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0f172a] p-6 text-center">
+          <p className="text-lg font-medium text-red-300">Something went wrong</p>
+          <p className="max-w-md break-words text-sm text-gray-400">
+            {this.state.error.message}
+          </p>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500"
+            className="rounded-lg bg-cyan-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
           >
             Reload page
           </button>
@@ -128,9 +126,23 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
+        <div className="relative min-h-screen">
+          <div className="fixed inset-0 z-0 h-full w-full min-h-screen">
+            <EtherealShadow
+              className="h-full w-full min-h-full min-w-full"
+              color="rgba(15, 23, 42, 0.92)"
+              animation={{ scale: 100, speed: 90 }}
+              noise={{ opacity: 0.4, scale: 1.2 }}
+              sizing="fill"
+              showTitle={false}
+            />
+          </div>
+          <div className="relative z-10">
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </div>
+        </div>
       </AuthProvider>
     </AppErrorBoundary>
   )

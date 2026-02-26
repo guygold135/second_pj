@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { CURRENCIES } from '../utils/currencies'
+import { card, input, pageContainer } from '../styles/designSystem'
 
 export default function Settings() {
   const { currencyCode, setCurrencyCode, formatMoney } = useCurrency()
@@ -27,12 +28,12 @@ export default function Settings() {
   }, [selectorOpen])
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+    <div className={`${pageContainer} mx-auto max-w-2xl`}>
       <h1 className="text-xl font-medium text-white sm:text-2xl">
         Settings
       </h1>
 
-      <section className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-lg shadow-black/20">
+      <section className={card}>
         <h2 className="mb-1 text-sm font-medium uppercase tracking-wider text-gray-400">
           Currency
         </h2>
@@ -46,7 +47,7 @@ export default function Settings() {
               setSelectorOpen((o) => !o)
               if (!selectorOpen) setSearch('')
             }}
-            className="flex w-full items-center justify-between rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-left text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            className={`flex w-full items-center justify-between ${input.select}`}
           >
             <span>
               {selected ? `${selected.code} — ${selected.name}` : 'Select currency'}
@@ -63,7 +64,7 @@ export default function Settings() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by code or name..."
-                  className="w-full rounded border border-gray-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-cyan-500 focus:outline-none"
+                  className={input.base}
                   autoFocus
                 />
               </div>

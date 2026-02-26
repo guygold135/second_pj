@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, type ComponentType } from 'react'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-
 export type OpportunityCostProps = {
   /** When coming from the budget tracker, pass the overspend amount here */
   prefillAmount?: number

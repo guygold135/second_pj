@@ -21,8 +21,10 @@ import { useGoals } from '../contexts/GoalsContext'
 import { useMissions, GOAL_FILTER_PREFIX, type Mission, type Recurrence } from '../contexts/MissionsContext'
 import { getRandomQuoteForPage } from '../utils/quotes'
 import { StakeSetupModal, StakeBadge, type StakeInfo } from '../components/StakeSetupModal'
+import { RippleButton } from '../components/ui/ripple-button'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { dragHandle, pageContainer } from '../styles/designSystem'
 /** שם התיקייה בסרגל — לא קטגוריה לבחירה, רק כותרת לתיקייה. */
 const CATEGORIES_FOLDER_NAME = 'General'
 /** תיקיית "Goals" בסרגל — כותרת בלבד, כמו General. */
@@ -114,7 +116,7 @@ function SortableCategoryItem({
         type="button"
         onClick={onSelect}
         className={`min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
-          isSelected ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+          isSelected ? 'bg-cyan-500/15 text-cyan-400' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
         }`}
       >
         {id}
@@ -185,7 +187,7 @@ function SortableGoalItem({
         type="button"
         onClick={onSelect}
         className={`min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
-          isSelected ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+          isSelected ? 'bg-cyan-500/15 text-cyan-400' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
         }`}
       >
         {goal.title}
@@ -262,7 +264,7 @@ function SortableMissionCard({
       <span
         {...listeners}
         {...attributes}
-        className="cursor-grab touch-none shrink-0 rounded p-1 text-gray-500 hover:text-gray-400 active:cursor-grabbing"
+        className={dragHandle}
         aria-label="Drag to reorder or move to another category"
       >
         <DragHandleIcon className="h-3.5 w-3" />
@@ -344,7 +346,7 @@ function SortableMissionCard({
           <button
             type="button"
             onClick={() => onEdit(mission)}
-            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-blue-500/10 hover:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-cyan-500/10 hover:text-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
             aria-label="Edit mission"
           >
             <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -390,12 +392,12 @@ function DroppableSection({
   return (
     <div
       ref={setNodeRef}
-      className={`rounded-lg transition-colors duration-150 ${showIndicator ? 'ring-2 ring-inset ring-blue-500/50 bg-blue-500/5' : ''} ${className ?? ''}`}
+      className={`rounded-lg transition-colors duration-150 ${showIndicator ? 'ring-2 ring-inset ring-cyan-500/50 bg-cyan-500/5' : ''} ${className ?? ''}`}
       data-droppable-category={category}
     >
       {children}
       {showIndicator && (
-        <div className="mt-2 h-1 rounded-full bg-blue-500/40" aria-hidden title="Drop zone — will land at end of this category" />
+        <div className="mt-2 h-1 rounded-full bg-cyan-500/40" aria-hidden title="Drop zone — will land at end of this category" />
       )}
     </div>
   )
@@ -1047,13 +1049,11 @@ export default function MyMissions() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pt-0 pb-6 sm:px-6 lg:px-8">
+    <div className={`${pageContainer} mx-auto w-full max-w-[1600px]`}>
       {/* ציטוט מוטיבציה — רוחב מלא כמו ההדר, רווח תחתון אוורירי (mb-12) */}
-      <div className="mb-6 flex w-full items-center gap-3 rounded-lg border border-blue-500/30 bg-slate-900 px-4 py-3">
-        <svg className="h-5 w-5 shrink-0 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-        </svg>
-        <span className="flex-1 bg-transparent text-center text-white" aria-hidden="true">
+      <div className="mb-6 flex w-full items-center gap-3 rounded-lg border border-cyan-500/10 bg-slate-800/50 px-4 py-3 backdrop-blur-sm">
+        <span className="shrink-0 text-cyan-400/70" aria-hidden="true">✦</span>
+        <span className="flex-1 text-center text-[13px] italic text-gray-400" aria-hidden="true">
           {missionPlaceholder}
         </span>
       </div>
@@ -1064,8 +1064,8 @@ export default function MyMissions() {
 
       {/* אזור יצירת משימה חדשה — לא מוצג ב־"Completed missions" (רק צפייה במשימות שהושלמו) */}
       {selectedCategoryFilter !== COMPLETED_MISSIONS_FILTER && selectedCategoryFilter !== UNCOMPLETED_MISSIONS_FILTER && (!showAddMissionForm ? (
-        <div className="rounded-2xl bg-slate-900/60">
-          <button
+        <div>
+          <RippleButton
             type="button"
             onClick={() => {
               setEditingMissionId(null)
@@ -1076,25 +1076,24 @@ export default function MyMissions() {
               }
               setShowAddMissionForm(true)
             }}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gray-600 bg-slate-900/40 px-4 py-3 text-sm font-medium text-gray-300 transition hover:border-blue-500/50 hover:bg-slate-800/60 hover:text-white"
+            className="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gray-700/80 bg-slate-900/30 px-4 py-3.5 text-sm font-medium text-gray-400 transition-all duration-200 hover:border-cyan-500/40 hover:bg-slate-800/60 hover:text-white"
+            rippleClassName="bg-cyan-500/40"
             aria-expanded="false"
             aria-controls="add-mission-form"
             id="add-mission-toggle"
           >
-            <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+            <span className="text-lg transition-transform duration-200 group-hover:scale-110">+</span>
             Add Mission
-          </button>
+          </RippleButton>
         </div>
       ) : (
-        <div id="add-mission-form" className="space-y-4 rounded-2xl border border-gray-800 bg-slate-900/60 p-4" aria-labelledby="add-mission-toggle">
+        <div id="add-mission-form" className="space-y-4 rounded-xl border border-gray-700/60 bg-slate-900 p-5 shadow-lg shadow-black/20" aria-labelledby="add-mission-toggle">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <input
               value={newTitle}
               onChange={(event) => setNewTitle(event.target.value)}
               placeholder="Add a new mission"
-              className="flex-1 rounded-xl border border-gray-700 bg-slate-900 px-4 py-3 text-white placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="flex-1 rounded-lg border border-gray-700 bg-slate-800 px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
             />
             <select
               value={newCategory}
@@ -1102,10 +1101,10 @@ export default function MyMissions() {
                 setNewCategory(e.target.value)
                 setCategoryError(false)
               }}
-              className={`rounded-xl border bg-slate-900 px-4 py-3 text-sm text-white focus:outline-none focus:ring-1 ${
+              className={`rounded-lg border bg-slate-800 px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 transition-colors ${
                 categoryError
                   ? 'border-red-500 ring-1 ring-red-500 focus:border-red-500 focus:ring-red-500'
-                  : 'border-gray-700 focus:border-blue-500 focus:ring-blue-500'
+                  : 'border-gray-700 focus:border-cyan-500/50 focus:ring-cyan-500/30'
               }`}
               aria-label="Category"
               aria-invalid={categoryError}
@@ -1126,10 +1125,10 @@ export default function MyMissions() {
                 setNewRecurrence(e.target.value as Recurrence | '')
                 setRecurrenceError(false)
               }}
-              className={`rounded-xl border bg-slate-900 px-4 py-3 text-white focus:outline-none focus:ring-1 ${
+              className={`rounded-lg border bg-slate-800 px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 transition-colors ${
                 recurrenceError
                   ? 'border-red-500 ring-1 ring-red-500 focus:border-red-500 focus:ring-red-500'
-                  : 'border-gray-700 focus:border-blue-500 focus:ring-blue-500'
+                  : 'border-gray-700 focus:border-cyan-500/50 focus:ring-cyan-500/30'
               }`}
               aria-label="Repeated time frame"
               aria-invalid={recurrenceError}
@@ -1145,7 +1144,7 @@ export default function MyMissions() {
 
           {/* Duration + Target Count וכפתורים — באותה שורה: Duration משמאל, Target Count + כפתורים מימין. */}
           <div className="flex flex-nowrap items-center justify-between gap-3">
-            <div className="flex w-fit items-center gap-2 rounded-xl border border-gray-700 bg-slate-900 px-3 py-2">
+            <div className="flex w-fit items-center gap-2 rounded-lg border border-gray-700 bg-slate-800 px-3 py-2">
               <span className="text-xs uppercase tracking-wide text-gray-400">Duration</span>
               <DurationCombobox
                 value={hours}
@@ -1185,14 +1184,14 @@ export default function MyMissions() {
                     ;(e.target as HTMLInputElement).blur()
                   }
                 }}
-                className="w-16 rounded-lg border border-gray-700 bg-slate-900 px-2 py-1 text-center text-white"
+                className="w-16 rounded-lg border border-gray-700 bg-slate-800 px-2 py-1 text-center text-sm text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
                 aria-label="Target count"
               />
             </label>
             <button
               type="button"
               onClick={handleAdd}
-              className="rounded-xl bg-blue-600 px-5 py-3 text-[13px] font-normal uppercase tracking-wider text-white transition hover:bg-blue-500"
+              className="rounded-lg bg-cyan-600 px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-cyan-500 active:scale-[0.98]"
             >
               {editingMissionId ? 'Keep changes' : 'Add Mission'}
             </button>
@@ -1210,7 +1209,7 @@ export default function MyMissions() {
                 setNewTargetCount(1)
                 setShowAddMissionForm(false)
               }}
-              className="rounded-xl border border-red-800/80 bg-red-800/80 px-5 py-3 text-sm font-medium text-white transition hover:bg-red-700/90 hover:border-red-700/90"
+              className="rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-400 transition-all hover:bg-slate-800 hover:text-white active:scale-[0.98]"
             >
               Cancel
             </button>
@@ -1221,13 +1220,13 @@ export default function MyMissions() {
 
       {/* שורת מסננים מעל רשימת "Completed missions": קטגוריה + טווח תאריכים (אחרון יום/שבוע/חודש או לוח שנה). */}
       {selectedCategoryFilter === COMPLETED_MISSIONS_FILTER && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-800/60 bg-slate-900/50 p-4">
           <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
             <span>Category</span>
             <select
               value={completedCategoryFilter}
               onChange={(e) => setCompletedCategoryFilter(e.target.value)}
-              className="rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="rounded-lg border border-gray-700 bg-slate-800 px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
               aria-label="Filter completed by category"
             >
               <option value="All">All</option>
@@ -1244,7 +1243,7 @@ export default function MyMissions() {
             <select
               value={completedRecurrenceFilter}
               onChange={(e) => setCompletedRecurrenceFilter(e.target.value as 'all' | Recurrence)}
-              className="rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="rounded-lg border border-gray-700 bg-slate-800 px-4 py-2.5 text-sm text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
               aria-label="Filter completed by repeated time frame"
             >
               <option value="all">All</option>
@@ -1265,7 +1264,7 @@ export default function MyMissions() {
                   setCompletedDateTo('')
                 }
               }}
-              className="rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="rounded-lg border border-gray-700 bg-slate-800 px-4 py-2.5 text-sm text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
               aria-label="Filter completed by time frame"
             >
               <option value="all">All</option>
@@ -1284,7 +1283,7 @@ export default function MyMissions() {
                   type="date"
                   value={completedDateFrom}
                   onChange={(e) => setCompletedDateFrom(e.target.value)}
-                  className="rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="rounded-lg border border-gray-700 bg-slate-800 px-4 py-2.5 text-sm text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
                   aria-label="From date"
                 />
               </label>
@@ -1296,7 +1295,7 @@ export default function MyMissions() {
                   value={completedDateTo}
                   onChange={(e) => setCompletedDateTo(e.target.value)}
                   min={completedDateFrom || undefined}
-                  className="rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="rounded-lg border border-gray-700 bg-slate-800 px-4 py-2.5 text-sm text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
                   aria-label="To date (from and dates in between are shown)"
                 />
               </label>
@@ -1307,7 +1306,7 @@ export default function MyMissions() {
                   completedDateToRef.current?.blur()
                 }}
                 disabled={!completedDateFrom || !completedDateTo}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50 disabled:pointer-events-none"
+                className="rounded-lg bg-cyan-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-cyan-500 disabled:opacity-40"
               >
                 Apply
               </button>
@@ -1318,11 +1317,11 @@ export default function MyMissions() {
 
       {/* מצב ריק: אותו בלוק כשאין משימות בכלל או שאין משימות בקטגוריה הנבחרת */}
       {displayedMissions.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800 bg-slate-900/40 py-16 text-center">
-          <div className="mb-4 flex h-24 w-24 items-center justify-center text-7xl leading-none opacity-65" aria-hidden="true">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800/40 bg-slate-900/30 py-20 text-center">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800/60" aria-hidden="true">
             🎯
           </div>
-          <p className="text-gray-300">
+          <p className="max-w-sm text-sm leading-relaxed text-gray-500">
             {selectedCategoryFilter === 'All'
               ? 'No active missions yet. Create one above to get started!'
               : selectedCategoryFilter === COMPLETED_MISSIONS_FILTER
@@ -1357,8 +1356,10 @@ export default function MyMissions() {
           <div className="space-y-6">
             {(missionsGroupedByCategory ?? completedMissionsGroupedByCategory!)!.map(({ category, missions }) => (
               <section key={category} className="space-y-3" aria-labelledby={`category-${category}`}>
-                <h2 id={`category-${category}`} className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-                  {category.startsWith(GOAL_FILTER_PREFIX) ? getGoalById(category.slice(GOAL_FILTER_PREFIX.length))?.title ?? category : category}
+                <h2 id={`category-${category}`} className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-gray-500">
+                  <span className="h-px flex-1 bg-gray-800" />
+                  <span>{category.startsWith(GOAL_FILTER_PREFIX) ? getGoalById(category.slice(GOAL_FILTER_PREFIX.length))?.title ?? category : category}</span>
+                  <span className="h-px flex-1 bg-gray-800" />
                 </h2>
                 <DroppableSection category={category} className="space-y-3" showDropIndicator={false}>
                   <SortableContext items={missions.map((m) => m.id)} strategy={verticalListSortingStrategy}>
@@ -1416,7 +1417,7 @@ export default function MyMissions() {
                 ? getGoalById(m.goalId ?? m.category.slice(GOAL_FILTER_PREFIX.length))?.title ?? m?.category
                 : m?.category
             return m ? (
-              <div className="flex cursor-grabbing items-center justify-between rounded-xl border border-gray-700 bg-slate-800/95 px-4 py-3 shadow-lg">
+              <div className="flex cursor-grabbing items-center justify-between rounded-xl border border-cyan-500/20 bg-slate-900/95 px-4 py-3.5 shadow-2xl shadow-black/40 backdrop-blur-sm">
                 <span className="shrink-0 rounded p-1 text-gray-400">
                   <DragHandleIcon className="h-3.5 w-3" />
                 </span>
@@ -1447,14 +1448,14 @@ export default function MyMissions() {
         - מגבלות: modifiers — restrictToVerticalAxis (תנועה רק אנכית), restrictToParentElement (לא יוצאים מגבולות רשימת הקטגוריות).
         - מעברים: transition על פריטי הרשימה + dropAnimation ב-DragOverlay למעבר חלק בשחרור.
       */}
-        <aside className="flex w-48 shrink-0 flex-col rounded-xl border border-gray-800 bg-slate-900/60 p-4">
+        <aside className="sticky top-6 flex w-48 shrink-0 flex-col self-start rounded-xl border border-gray-800/60 bg-slate-900/50 p-4 backdrop-blur-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
           <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Categories</p>
           {generalFolderExpanded && (
             <button
               type="button"
               onClick={() => setIsAddingCategory(true)}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-400 transition hover:bg-slate-700 hover:text-white"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-400 transition hover:bg-slate-800 hover:text-white"
               aria-label="Add category"
             >
               +
@@ -1462,17 +1463,17 @@ export default function MyMissions() {
           )}
         </div>
         <nav className="flex min-h-0 flex-1 flex-col" aria-label="Filter by category">
-          <div className="border-b border-gray-700">
+          <div className="border-b border-gray-800/40">
             <button
               type="button"
               onClick={() => selectCategory('All')}
               className={`w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
                 selectedCategoryFilter === 'All'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                  ? 'bg-cyan-500/15 text-cyan-400'
+                  : 'text-gray-400 hover:bg-slate-800 hover:text-white'
               }`}
             >
-              All
+              All Missions
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -1509,11 +1510,11 @@ export default function MyMissions() {
               }}
             >
               {/* General = תיקייה (לא קטגוריה) — לחיצה מציגה/מסתירה את הקטגוריות שבתוכה. */}
-              <div className="border-b border-gray-700">
+              <div className="border-b border-gray-800/40">
                 <button
                   type="button"
                   onClick={() => setGeneralFolderExpanded((e) => !e)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-gray-300 transition hover:bg-slate-800 hover:text-white"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-gray-400 transition hover:bg-slate-800 hover:text-white"
                   aria-expanded={generalFolderExpanded}
                   aria-label={generalFolderExpanded ? 'Collapse General folder' : 'Expand General folder'}
                 >
@@ -1535,52 +1536,54 @@ export default function MyMissions() {
               </div>
               {generalFolderExpanded && (
                 <SortableContext items={categoriesOrder} strategy={verticalListSortingStrategy}>
-                  {categoriesOrder.map((cat, index) => (
-                    <SortableCategoryItem
-                      key={cat}
-                      id={cat}
-                      isSelected={selectedCategoryFilter === cat}
-                      onSelect={() => selectCategory(cat)}
-                      onDelete={handleDeleteCategory}
-                      isLast={index === categoriesOrder.length - 1 && !isAddingCategory}
-                    />
-                  ))}
-                  {isAddingCategory && (
-                    <div className="flex items-center gap-2 rounded-lg">
-                      <input
-                        ref={newCategoryInputRef}
-                        type="text"
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            submitNewCategory()
-                          }
-                          if (e.key === 'Escape') {
-                            setNewCategoryName('')
-                            setIsAddingCategory(false)
-                            newCategoryInputRef.current?.blur()
-                          }
-                        }}
-                        onBlur={() => {
-                          if (newCategoryName.trim()) submitNewCategory()
-                          else setIsAddingCategory(false)
-                        }}
-                        placeholder="New category"
-                        className="w-full rounded-lg border border-gray-600 bg-slate-800 px-2 py-2 text-sm text-white placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        aria-label="New category name"
+                  <div className="border-l border-gray-800/40 pl-2">
+                    {categoriesOrder.map((cat, index) => (
+                      <SortableCategoryItem
+                        key={cat}
+                        id={cat}
+                        isSelected={selectedCategoryFilter === cat}
+                        onSelect={() => selectCategory(cat)}
+                        onDelete={handleDeleteCategory}
+                        isLast={index === categoriesOrder.length - 1 && !isAddingCategory}
                       />
-                    </div>
-                  )}
+                    ))}
+                    {isAddingCategory && (
+                      <div className="flex items-center gap-2 rounded-lg">
+                        <input
+                          ref={newCategoryInputRef}
+                          type="text"
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              submitNewCategory()
+                            }
+                            if (e.key === 'Escape') {
+                              setNewCategoryName('')
+                              setIsAddingCategory(false)
+                              newCategoryInputRef.current?.blur()
+                            }
+                          }}
+                          onBlur={() => {
+                            if (newCategoryName.trim()) submitNewCategory()
+                            else setIsAddingCategory(false)
+                          }}
+                          placeholder="New category"
+                          className="w-full rounded-lg border border-gray-700 bg-slate-800 px-2 py-2 text-sm text-white placeholder:text-gray-500 focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
+                          aria-label="New category name"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </SortableContext>
               )}
               {/* Goals — תיקייה נפרדת (כרגע ללא תוכן). */}
-              <div className="border-b border-gray-700">
+              <div className="border-b border-gray-800/40">
                 <button
                   type="button"
                   onClick={() => setGoalsFolderExpanded((e) => !e)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-gray-300 transition hover:bg-slate-800 hover:text-white"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-gray-400 transition hover:bg-slate-800 hover:text-white"
                   aria-expanded={goalsFolderExpanded}
                   aria-label={goalsFolderExpanded ? 'Collapse Goals folder' : 'Expand Goals folder'}
                 >
@@ -1601,7 +1604,7 @@ export default function MyMissions() {
                 </button>
               </div>
               {goalsFolderExpanded && (
-                <div className="py-1">
+                <div className="border-l border-gray-800/40 py-1 pl-2">
                   {goalsList.length === 0 ? (
                     <p className="rounded-lg px-2 py-2 text-xs text-gray-500">No goals yet</p>
                   ) : (
@@ -1624,14 +1627,14 @@ export default function MyMissions() {
                 </div>
               )}
               {/* Completed missions — תמיד מחוץ לתיקייה, לא בתוך General. */}
-              <div className="border-t border-gray-700 pt-1">
+              <div className="border-t border-gray-800/40 pt-1">
                 <button
                   type="button"
                   onClick={() => selectCategory(COMPLETED_MISSIONS_FILTER)}
                   className={`w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
                     selectedCategoryFilter === COMPLETED_MISSIONS_FILTER
-                      ? 'bg-emerald-600/80 text-white'
-                      : 'text-emerald-400 hover:bg-slate-800 hover:text-emerald-300'
+                      ? 'bg-emerald-500/10 text-emerald-400'
+                      : 'text-emerald-600/60 hover:text-emerald-400'
                   }`}
                 >
                   Completed missions
@@ -1641,8 +1644,8 @@ export default function MyMissions() {
                   onClick={() => selectCategory(UNCOMPLETED_MISSIONS_FILTER)}
                   className={`mt-0.5 w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
                     selectedCategoryFilter === UNCOMPLETED_MISSIONS_FILTER
-                      ? 'bg-red-600/80 text-white'
-                      : 'text-red-400 hover:bg-slate-800 hover:text-red-300'
+                      ? 'bg-red-500/10 text-red-400'
+                      : 'text-red-600/60 hover:text-red-400'
                   }`}
                 >
                   Uncompleted missions
@@ -1656,11 +1659,11 @@ export default function MyMissions() {
                 modifiers={categoryModifiers}
               >
                 {activeCategory ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-slate-800/95 shadow-lg">
+                  <div className="flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-slate-900/95 px-2 py-1.5 shadow-xl shadow-black/20 backdrop-blur-sm">
                     <span className="cursor-grabbing rounded p-1 text-gray-400">
                       <DragHandleIcon className="h-3.5 w-3" />
                     </span>
-                    <span className="flex-1 rounded-lg px-2 py-2 text-sm font-medium text-white">
+                    <span className="flex-1 text-sm font-medium text-white">
                       {getGoalById(activeCategory)?.title ?? activeCategory}
                     </span>
                   </div>

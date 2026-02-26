@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { OnboardingOverlay, shouldShowOnboarding } from '../components/OnboardingOverlay'
 import {
   DndContext,
   closestCenter,
@@ -18,6 +19,7 @@ import { useMissions, GOAL_FILTER_PREFIX } from '../contexts/MissionsContext'
 import { useGoals, type GoalTrackingMode } from '../contexts/GoalsContext'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { getRandomQuoteForPage } from '../utils/quotes'
+import { card, btn, pageContainer } from '../styles/designSystem'
 import { getMonthStartEnd, computeSummary, totalPlannedBudget, spentByCategory } from '../components/budget/budgetUtils'
 import { getCategoryColorHex } from '../components/budget/categoryColors'
 import type { Budget, BudgetSummary } from '../types'
@@ -202,7 +204,7 @@ function GoalIcon({ mode }: { mode?: GoalTrackingMode }) {
   const m = mode ?? 'missions_equal'
   if (m === 'time') {
     return (
-      <svg className="h-4 w-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <svg className="h-4 w-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
       </svg>
     )
@@ -322,7 +324,7 @@ interface DashboardData {
 const GreetingWidget = ({ data }: { widget: Widget; data: DashboardData }) => {
   const initial = (data.displayName || 'U').charAt(0).toUpperCase()
   return (
-    <header className="flex items-center gap-4 rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+    <header className={`flex items-center gap-4 ${card} p-5`}>
       <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-700 text-lg font-semibold text-white">
         {initial}
       </div>
@@ -335,8 +337,8 @@ const GreetingWidget = ({ data }: { widget: Widget; data: DashboardData }) => {
 }
 
 const MotivationQuoteWidget = ({ data }: { widget: Widget; data: DashboardData }) => (
-  <div className="flex items-center gap-3 rounded-xl border border-blue-500/30 bg-slate-900 px-4 py-3">
-    <svg className="h-5 w-5 shrink-0 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <div className="flex items-center gap-3 rounded-xl border border-cyan-500/30 bg-slate-900/60 px-4 py-3">
+    <svg className="h-5 w-5 shrink-0 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
     </svg>
     <span className="flex-1 text-white">{data.motivationQuote}</span>
@@ -344,10 +346,10 @@ const MotivationQuoteWidget = ({ data }: { widget: Widget; data: DashboardData }
 )
 
 const MissionsSummaryWidget = ({ data }: { widget: Widget; data: DashboardData }) => (
-  <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+  <div className={`${card} p-5`}>
     <div className="flex items-start justify-between">
       <span className="text-xs font-medium uppercase tracking-wider text-gray-400">Missions</span>
-      <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+      <svg className="h-5 w-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
     </div>
     {!data.missionsLoading ? (
       <>
@@ -357,7 +359,7 @@ const MissionsSummaryWidget = ({ data }: { widget: Widget; data: DashboardData }
         <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-700">
           <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-[width] duration-300" style={{ width: `${data.activeMissions.length > 0 ? Math.min(100, (data.completedTodayCount / data.activeMissions.length) * 100) : 0}%` }} />
         </div>
-        <Link to="/my-missions" className="mt-3 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
+        <Link to="/my-missions" className="mt-3 inline-block text-sm font-medium text-cyan-400 hover:underline">View all</Link>
       </>
     ) : (
       <p className="mt-2 text-sm text-gray-500">Loading…</p>
@@ -366,10 +368,10 @@ const MissionsSummaryWidget = ({ data }: { widget: Widget; data: DashboardData }
 )
 
 const GoalsSummaryWidget = ({ data }: { widget: Widget; data: DashboardData }) => (
-  <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+  <div className={`${card} p-5`}>
     <div className="flex items-start justify-between">
       <span className="text-xs font-medium uppercase tracking-wider text-gray-400">Goals</span>
-      <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+      <svg className="h-5 w-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
     </div>
     {!data.goalsLoading ? (
       <>
@@ -380,7 +382,7 @@ const GoalsSummaryWidget = ({ data }: { widget: Widget; data: DashboardData }) =
         <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-700">
           <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-[width] duration-300" style={{ width: `${Math.min(100, Math.max(0, data.avgGoalProgress))}%` }} />
         </div>
-        <Link to="/goals" className="mt-3 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
+        <Link to="/goals" className="mt-3 inline-block text-sm font-medium text-cyan-400 hover:underline">View all</Link>
       </>
     ) : (
       <p className="mt-2 text-sm text-gray-500">Loading…</p>
@@ -392,15 +394,15 @@ const BudgetSummaryWidget = ({ data }: { widget: Widget; data: DashboardData }) 
   const execPct = data.budgetPlannedTotal > 0 ? (data.budgetSummary.expensesTotal / data.budgetPlannedTotal) * 100 : 0
   const expenseColor = execPct >= 175 ? 'text-red-500' : execPct >= 125 ? 'text-orange-500' : execPct >= 110 ? 'text-orange-400' : execPct >= 100 ? 'text-yellow-400' : 'text-cyan-400'
   return (
-    <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+    <div className={`${card} p-5`}>
       <div className="flex items-start justify-between">
         <span className="text-xs font-medium uppercase tracking-wider text-gray-400">Budget</span>
-        <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <svg className="h-5 w-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
       </div>
       <p className="mt-2 text-sm text-gray-400">This month</p>
       <p className="text-sm text-gray-400">
         {data.budgetPlannedTotal > 0 ? (
-          <> <span className={`font-semibold ${expenseColor}`}>{data.formatMoney(data.budgetSummary.expensesTotal)}</span> spent out of <span className="font-semibold text-blue-400">{data.formatMoney(data.budgetPlannedTotal)}</span> </>
+          <> <span className={`font-semibold ${expenseColor}`}>{data.formatMoney(data.budgetSummary.expensesTotal)}</span> spent out of <span className="font-semibold text-cyan-400">{data.formatMoney(data.budgetPlannedTotal)}</span> </>
         ) : (
           <span className="font-semibold text-orange-500">{data.formatMoney(data.budgetSummary.expensesTotal)}</span>
         )}
@@ -433,42 +435,69 @@ const BudgetSummaryWidget = ({ data }: { widget: Widget; data: DashboardData }) 
           )}
         </div>
       )}
-      <Link to="/budget" className="mt-2 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
+      <Link to="/budget" className="mt-2 inline-block text-sm font-medium text-cyan-400 hover:underline">View all</Link>
     </div>
   )
 }
 
 const TodaysMissionsWidget = ({ data }: { widget: Widget; data: DashboardData }) => {
   const onToggle = data.onToggleMission
+  // Build a quick lookup: missionId -> stake amount (if any active stake)
+  const stakedMissionIds = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const s of data.activeStakesFromSupabase) {
+      if (s.itemType === 'mission') map.set(s.itemId, s.amount)
+    }
+    return map
+  }, [data.activeStakesFromSupabase])
+
   return (
-    <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+    <div className={`${card} p-5`}>
       <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">Today&apos;s Missions</h2>
       {data.todaysMissions.length === 0 ? (
         <p className="py-6 text-center text-sm text-gray-500">No missions for today.</p>
       ) : (
         <ul className="space-y-2">
-          {data.todaysMissions.slice(0, 10).map((m) => (
-            <li key={m.id} className="flex items-center gap-3 rounded-lg border border-gray-800 bg-slate-800/50 px-3 py-2">
-              {onToggle ? (
-                <button
-                  type="button"
-                  onClick={() => onToggle(m.id)}
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-gray-500 bg-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500/50"
-                  aria-label={m.isCompleted ? 'Completed' : 'Mark complete'}
-                >
-                  {m.isCompleted && <span className="text-green-400">✓</span>}
-                </button>
-              ) : (
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-gray-600">{m.isCompleted ? '✓' : ''}</span>
-              )}
-              <span className={`min-w-0 flex-1 truncate text-sm ${m.isCompleted ? 'text-gray-500 line-through' : 'text-white'}`}>{m.title}</span>
-              <span className="shrink-0 rounded border border-gray-600 px-2 py-0.5 text-xs text-gray-400">{m.category}</span>
-              <span className="shrink-0 text-xs text-gray-500">{m.recurrence !== 'none' ? m.recurrence : 'One-time'}</span>
-            </li>
-          ))}
+          {data.todaysMissions.slice(0, 10).map((m) => {
+            const stakeAmount = stakedMissionIds.get(m.id)
+            const hasStake = stakeAmount !== undefined
+            return (
+              <li
+                key={m.id}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
+                  hasStake
+                    ? 'border-amber-500/30 bg-amber-500/5 ring-1 ring-amber-500/10'
+                    : 'border-gray-800 bg-slate-800/50'
+                }`}
+              >
+                {onToggle ? (
+                  <button
+                    type="button"
+                    onClick={() => onToggle(m.id)}
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-gray-500 bg-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+                    aria-label={m.isCompleted ? 'Completed' : 'Mark complete'}
+                  >
+                    {m.isCompleted && <span className="text-green-400">✓</span>}
+                  </button>
+                ) : (
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-gray-600">{m.isCompleted ? '✓' : ''}</span>
+                )}
+                <span className={`min-w-0 flex-1 truncate text-sm ${m.isCompleted ? 'text-gray-500 line-through' : hasStake ? 'font-medium text-white' : 'text-white'}`}>
+                  {m.title}
+                </span>
+                {hasStake && (
+                  <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                    💰 {stakeAmount}
+                  </span>
+                )}
+                <span className="shrink-0 rounded border border-gray-600 px-2 py-0.5 text-xs text-gray-400">{m.category}</span>
+                <span className="shrink-0 text-xs text-gray-500">{m.recurrence !== 'none' ? m.recurrence : 'One-time'}</span>
+              </li>
+            )
+          })}
         </ul>
       )}
-      <Link to="/my-missions" className="mt-4 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
+      <Link to="/my-missions" className="mt-4 inline-block text-sm font-medium text-cyan-400 hover:underline">View all</Link>
     </div>
   )
 }
@@ -479,7 +508,7 @@ const GoalsProgressWidget = ({ data }: { widget: Widget; data: DashboardData }) 
   const visible = showAll ? goalsList : goalsList.slice(0, 5)
   const hasMore = goalsList.length > 5
   return (
-    <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+    <div className={`${card} p-5`}>
       <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">Goals Progress</h2>
       {goalsList.length === 0 ? (
         <p className="py-6 text-center text-sm text-gray-500">No goals yet.</p>
@@ -503,30 +532,53 @@ const GoalsProgressWidget = ({ data }: { widget: Widget; data: DashboardData }) 
             })}
           </ul>
           {hasMore && (
-            <button type="button" onClick={() => setShowAll((v) => !v)} className="mt-3 text-sm font-medium text-blue-400 hover:underline">
+            <button type="button" onClick={() => setShowAll((v) => !v)} className="mt-3 text-sm font-medium text-cyan-400 hover:underline">
               {showAll ? 'Show less' : 'Show more'}
             </button>
           )}
         </>
       )}
-      <Link to="/goals" className="mt-4 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
+      <Link to="/goals" className="mt-4 inline-block text-sm font-medium text-cyan-400 hover:underline">View all</Link>
     </div>
   )
 }
 
 const ActiveStakesWidget = ({ data }: { widget: Widget; data: DashboardData }) => (
-  <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
-    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">Active Stakes</h2>
+  <div className={`${card} border-amber-500/30 p-5`}>
+    <div className="mb-3 flex items-center gap-2">
+      <svg className="h-5 w-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-400">Active Stakes</h2>
+    </div>
     {data.activeStakesFromSupabase.length === 0 ? (
-      <p className="py-4 text-center text-sm text-gray-500">No active stakes. Add a stake to a mission or goal in My Missions or Goals to see it here.</p>
+      <div className="py-4 text-center">
+        <p className="mb-2 text-sm text-gray-500">No active stakes.</p>
+        <p className="text-xs text-gray-600">Add a stake to a mission to see it here. Stakes make the difference.</p>
+        <Link to="/my-missions" className="mt-3 inline-block text-sm font-medium text-amber-400 hover:underline">
+          Go to My Missions →
+        </Link>
+      </div>
     ) : (
-      <div className="flex flex-wrap gap-3">
+      <div className="space-y-3">
         {data.activeStakesFromSupabase.map((s) => (
-          <div key={s.stakeId} className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-slate-800/60 px-3 py-2 text-sm">
-            <span className="font-medium text-white">{s.itemTitle}</span>
-            <span className="text-amber-300">{s.amount} {s.currency}</span>
-            <span className="text-gray-500">Due: {s.dueDate ? new Date(s.dueDate).toLocaleDateString() : '—'}</span>
-            <span className="rounded-full border border-amber-500/50 bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-300">{s.status}</span>
+          <div
+            key={s.stakeId}
+            className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 ring-1 ring-amber-500/10"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-white">{s.itemTitle}</p>
+              <p className="text-xs text-gray-500">
+                Due: {s.dueDate ? new Date(s.dueDate).toLocaleDateString() : '—'}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-base font-bold text-amber-300">{s.amount} {s.currency}</p>
+              <span className="inline-block rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                {s.status}
+              </span>
+            </div>
           </div>
         ))}
       </div>
@@ -535,7 +587,7 @@ const ActiveStakesWidget = ({ data }: { widget: Widget; data: DashboardData }) =
 )
 
 const MissionsByCategoryWidget = ({ data }: { widget: Widget; data: DashboardData }) => (
-  <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+  <div className={`${card} p-5`}>
     <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">Missions by Category</h2>
     {data.missionsGroupedByCategory.length === 0 ? (
       <p className="py-6 text-center text-sm text-gray-500">No missions yet.</p>
@@ -559,12 +611,12 @@ const MissionsByCategoryWidget = ({ data }: { widget: Widget; data: DashboardDat
         })}
       </ul>
     )}
-    <Link to="/my-missions" className="mt-4 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
+    <Link to="/my-missions" className="mt-4 inline-block text-sm font-medium text-cyan-400 hover:underline">View all</Link>
   </div>
 )
 
 const BudgetCategoriesWidget = ({ data }: { widget: Widget; data: DashboardData }) => (
-  <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+  <div className={`${card} p-5`}>
     <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">Budget Categories</h2>
     {data.budgetCategoriesWithSpent.length === 0 ? (
       <p className="py-6 text-center text-sm text-gray-500">No budget categories.</p>
@@ -581,7 +633,7 @@ const BudgetCategoriesWidget = ({ data }: { widget: Widget; data: DashboardData 
         ))}
       </div>
     )}
-    <Link to="/budget" className="mt-4 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
+    <Link to="/budget" className="mt-4 inline-block text-sm font-medium text-cyan-400 hover:underline">View all</Link>
   </div>
 )
 
@@ -600,7 +652,7 @@ function timeAgo(dateStr: string, now: Date): string {
 }
 
 const RecentCompletionsWidget = ({ data }: { widget: Widget; data: DashboardData }) => (
-  <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+  <div className={`${card} p-5`}>
     <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">Recent Completions</h2>
     {data.recentCompletions.length === 0 ? (
       <p className="py-6 text-center text-sm text-gray-500">No completed missions yet.</p>
@@ -618,12 +670,12 @@ const RecentCompletionsWidget = ({ data }: { widget: Widget; data: DashboardData
         ))}
       </ul>
     )}
-    <Link to="/my-missions" className="mt-4 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
+    <Link to="/my-missions" className="mt-4 inline-block text-sm font-medium text-cyan-400 hover:underline">View all</Link>
   </div>
 )
 
 const GoalsAtRiskWidget = ({ data }: { widget: Widget; data: DashboardData }) => (
-  <div className="rounded-xl border border-gray-800 bg-slate-900/60 p-5 shadow-xl shadow-black/40">
+  <div className={`${card} p-5`}>
     <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">Goals at Risk</h2>
     {data.goalsAtRisk.length === 0 ? (
       <p className="py-6 text-center text-sm text-gray-500">No goals below 30%.</p>
@@ -638,7 +690,7 @@ const GoalsAtRiskWidget = ({ data }: { widget: Widget; data: DashboardData }) =>
         ))}
       </ul>
     )}
-    <Link to="/goals" className="mt-4 inline-block text-sm font-medium text-blue-400 hover:underline">View all</Link>
+    <Link to="/goals" className="mt-4 inline-block text-sm font-medium text-cyan-400 hover:underline">View all</Link>
   </div>
 )
 
@@ -689,11 +741,11 @@ function SortableWidgetWrapper({
       ref={setNodeRef}
       data-widget-id={widget.id}
       style={{ ...style, ...flexStyle }}
-      className={`relative min-w-0 ${widthClass} ${editMode ? 'min-h-[100px] rounded-xl border-2 border-dashed border-blue-500/60 bg-slate-900/70' : ''} ${dragging ? 'z-50 opacity-0 pointer-events-none' : ''} ${editMode && !dragging ? 'opacity-95' : ''} ${justMoved ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#0f172a]' : ''}`}
+      className={`relative min-w-0 ${widthClass} ${editMode ? 'min-h-[100px] rounded-xl border-2 border-dashed border-cyan-500/60 bg-slate-900/70' : ''} ${dragging ? 'z-50 opacity-40 pointer-events-none' : ''} ${editMode && !dragging ? 'opacity-95' : ''} ${justMoved ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#0f172a]' : ''}`}
     >
       {editMode && (
         <div
-          className="z-10 flex h-9 shrink-0 items-center gap-2 rounded-t-xl border border-b-0 border-blue-500/40 bg-slate-800/95 px-2 cursor-grab active:cursor-grabbing"
+          className="z-10 flex h-9 shrink-0 items-center gap-2 rounded-t-xl border border-b-0 border-cyan-500/40 bg-slate-800/95 px-2 cursor-grab active:cursor-grabbing"
           {...attributes}
           {...listeners}
           aria-label="Drag to reorder"
@@ -707,7 +759,7 @@ function SortableWidgetWrapper({
                 key={s}
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onResize(widget.id, s) }}
-                className={`rounded px-2 py-0.5 text-xs font-medium ${isActive ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+                className={`rounded px-2 py-0.5 text-xs font-medium ${isActive ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
               >
                 {s === 'full' ? 'L' : s.charAt(0).toUpperCase()}
               </button>
@@ -776,7 +828,7 @@ function AddWidgetPanel({
                     key={type}
                     type="button"
                     onClick={() => onAdd(type)}
-                    className="relative rounded-xl border border-gray-700 bg-slate-800/80 p-4 text-left transition hover:border-blue-500 cursor-pointer"
+                    className="relative rounded-xl border border-gray-700 bg-slate-800/80 p-4 text-left transition hover:border-cyan-500 cursor-pointer"
                   >
                     {onDashboard && (
                       <span className="absolute right-2 top-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400">✓ On dashboard</span>
@@ -802,7 +854,8 @@ export default function Dashboard() {
   const { missions, setMissions, isLoading: missionsLoading } = useMissions()
   const { goals, getGoalById, isLoading: goalsLoading } = useGoals()
 
-  const [widgets, setWidgets] = useState<DashboardConfig>([])
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [widgets, setWidgets] = useState<DashboardConfig>(DEFAULT_DASHBOARD_CONFIG)
   const [editMode, setEditMode] = useState(false)
   const [showAddPanel, setShowAddPanel] = useState(false)
   const [isConfigLoaded, setIsConfigLoaded] = useState(false)
@@ -890,7 +943,12 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false
     loadDashboardConfig(user?.id).then((config) => {
-      if (!cancelled) { setWidgets(config); setIsConfigLoaded(true) }
+      if (!cancelled) {
+        setWidgets(config)
+        setIsConfigLoaded(true)
+        // Show onboarding for first-time users
+        if (shouldShowOnboarding()) setShowOnboarding(true)
+      }
     })
     return () => { cancelled = true }
   }, [user?.id])
@@ -1061,30 +1119,72 @@ export default function Dashboard() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }), useSensor(KeyboardSensor))
 
-  if (!isConfigLoaded) {
-    return (
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        <p className="text-gray-400">Loading dashboard…</p>
-      </div>
-    )
-  }
+  // ─── Priority Mission: nearest-deadline active stake ──────────────
+  const priorityStake = useMemo(() => {
+    if (activeStakesFromSupabase.length === 0) return null
+    const withDue = activeStakesFromSupabase.filter((s) => s.dueDate && s.status === 'active')
+    if (withDue.length === 0) return null
+    return withDue.sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
+  }, [activeStakesFromSupabase])
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className={`${pageContainer} mx-auto max-w-5xl`}>
+      {/* Onboarding overlay — shows once for new users */}
+      {showOnboarding && (
+        <OnboardingOverlay onDone={() => setShowOnboarding(false)} />
+      )}
+
+      {/* ── PRIORITY MISSION ─────────────────────────────────────── */}
+      {priorityStake && (
+        <section className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-slate-900/60 p-5 shadow-lg shadow-amber-900/20">
+          <div className="mb-2 flex items-center gap-2">
+            <svg className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-xs font-semibold uppercase tracking-widest text-amber-400">
+              What's at stake right now
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">{priorityStake.itemTitle}</h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Due{' '}
+                <span className="font-semibold text-amber-300">
+                  {new Date(priorityStake.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                </span>
+                {' · '}
+                <span className="font-semibold text-amber-300">
+                  {priorityStake.amount} {priorityStake.currency}
+                </span>{' '}
+                on the line
+              </p>
+            </div>
+            <Link
+              to="/my-missions"
+              className="rounded-lg border border-amber-500/50 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-300 transition-colors hover:bg-amber-500/30"
+            >
+              View Mission →
+            </Link>
+          </div>
+        </section>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-semibold text-white">Dashboard</h1>
         <div className="flex items-center gap-2">
           {editMode ? (
             <>
-              <button type="button" onClick={() => { setAddPanelInsertIndex(null); setShowAddPanel((v) => !v) }} className="rounded-lg border border-gray-600 bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+              <button type="button" onClick={() => { setAddPanelInsertIndex(null); setShowAddPanel((v) => !v) }} className={btn.secondary}>
                 Add Widget
               </button>
-              <button type="button" onClick={() => { setEditMode(false); setShowAddPanel(false) }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500">
+              <button type="button" onClick={() => { setEditMode(false); setShowAddPanel(false) }} className={btn.primary}>
                 Done
               </button>
             </>
           ) : (
-            <button type="button" onClick={() => setEditMode(true)} className="rounded-lg border border-gray-600 bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+            <button type="button" onClick={() => setEditMode(true)} className={btn.secondary}>
               Edit Dashboard
             </button>
           )}
@@ -1133,7 +1233,7 @@ export default function Dashboard() {
                         type="button"
                         onClick={() => { setAddPanelInsertIndex(insertIndex); setShowAddPanel(true) }}
                         style={{ flex: `${emptySlots} 0 0` }}
-                        className="flex min-h-[120px] min-w-0 items-center justify-center rounded-xl border-2 border-dashed border-gray-600 bg-slate-800/40 text-sm text-gray-500 transition hover:border-blue-500 hover:bg-slate-800/60 hover:text-gray-400"
+                        className="flex min-h-[120px] min-w-0 items-center justify-center rounded-xl border-2 border-dashed border-gray-600 bg-slate-800/40 text-sm text-gray-500 transition hover:border-cyan-500 hover:bg-slate-800/60 hover:text-gray-400"
                       >
                         + Add widget here
                       </button>
@@ -1155,7 +1255,7 @@ export default function Dashboard() {
             const overlayWidth = { small: 200, medium: 380, large: 560, full: 560 }[widget.size] ?? 280
             return (
               <div
-                className="rounded-xl border-2 border-blue-500 bg-slate-900/95 p-4 opacity-95 shadow-xl pointer-events-none"
+                className="rounded-xl border-2 border-cyan-500 bg-slate-900/95 p-4 opacity-95 shadow-xl pointer-events-none"
                 style={{ width: overlayWidth, maxWidth: 'min(560px, 95vw)' }}
               >
                 {content}

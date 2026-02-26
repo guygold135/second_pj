@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import type { BudgetCategory, BudgetTransaction } from '../../types'
+import { input } from '../../styles/designSystem'
 
 type SortKey = 'date' | 'amount' | 'category'
 
@@ -62,13 +63,13 @@ export function TransactionList({ transactions, categories, onEdit, onDelete }: 
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search..."
-          className="rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+          className={input.base}
           aria-label="Search transactions"
         />
         <select
           value={filterCategoryId}
           onChange={(e) => setFilterCategoryId(e.target.value)}
-          className="rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
+          className={input.select}
           aria-label="Filter by category"
         >
           <option value="">All categories</option>

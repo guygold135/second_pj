@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback, Component, type ReactNode } 
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { useAuth } from '../contexts/AuthContext'
+import { modal, input, btn } from '../styles/designSystem'
 
 class StakeModalErrorBoundary extends Component<
   { children: ReactNode; onBack: () => void },
@@ -22,7 +23,7 @@ class StakeModalErrorBoundary extends Component<
           <button
             type="button"
             onClick={this.props.onBack}
-            className="text-sm text-cyan-400 hover:underline"
+            className="text-sm text-cyan-400 hover:text-cyan-300"
           >
             ← Back to step 1
           </button>
@@ -64,7 +65,7 @@ class StakeModalRootErrorBoundary extends Component<
             <button
               type="button"
               onClick={this.props.onClose}
-              className="rounded-lg bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600"
+              className={btn.secondary}
             >
               Close
             </button>
@@ -145,9 +146,9 @@ function CardStep({
   currency,
   dueDate,
   stakeId,
-  itemId,
-  itemTitle,
-  itemType,
+  itemId: _itemId,
+  itemTitle: _itemTitle,
+  itemType: _itemType,
   failureMode,
   onSuccess,
   onError,
@@ -250,7 +251,7 @@ function CardStep({
       <button
         type="submit"
         disabled={!stripe || confirming}
-        className="w-full rounded-lg bg-cyan-600 py-2.5 font-medium text-white hover:bg-cyan-500 disabled:opacity-50"
+        className={`w-full ${btn.primary} py-2.5`}
       >
         {confirming ? 'Confirming…' : 'Confirm'}
       </button>
@@ -355,25 +356,25 @@ export function StakeSetupModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className={modal.backdrop}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="stake-modal-title"
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-gray-800 bg-slate-900 p-6 shadow-xl"
+        className={`${modal.box} max-w-md`}
         onClick={(e) => e.stopPropagation()}
       >
         <StakeModalRootErrorBoundary onClose={onClose}>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 id="stake-modal-title" className="text-lg font-semibold text-white">
+          <div className={modal.header}>
+            <h2 id="stake-modal-title" className={modal.title}>
               Add financial stake
             </h2>
             <button
               type="button"
               onClick={onClose}
-              className="rounded p-1 text-gray-400 hover:text-white"
+              className={modal.closeBtn}
               aria-label="Close"
             >
               ×
@@ -383,22 +384,22 @@ export function StakeSetupModal({
           {step === 1 && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-400">Amount</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-400">Amount</label>
               <input
                 type="number"
                 min={1}
                 step={1}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-700 bg-slate-800 px-3 py-2 text-white"
+                className={input.base}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-400">Currency</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-400">Currency</label>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-700 bg-slate-800 px-3 py-2 text-white"
+                className={input.select}
               >
                 {CURRENCIES.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -408,13 +409,13 @@ export function StakeSetupModal({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-400">Deadline</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-400">Deadline</label>
               <input
                 type="date"
                 min={minDate}
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-700 bg-slate-800 px-3 py-2 text-white"
+                className={input.base}
               />
             </div>
             <div>
@@ -447,7 +448,7 @@ export function StakeSetupModal({
             <button
               type="button"
               onClick={handleContinue}
-              className="w-full rounded-lg bg-cyan-600 py-2.5 font-medium text-white hover:bg-cyan-500"
+              className={`w-full ${btn.primary} py-2.5`}
             >
               Continue
             </button>
@@ -615,7 +616,7 @@ export function StakeBadge({
               <button
                 type="button"
                 onClick={() => setShowChargeConfirm(false)}
-                className="flex-1 rounded-lg border border-gray-600 py-2.5 text-sm font-medium text-gray-300 hover:bg-slate-800"
+                className={`flex-1 ${btn.secondary} py-2.5`}
               >
                 Cancel
               </button>
@@ -625,7 +626,7 @@ export function StakeBadge({
                   setShowChargeConfirm(false)
                   onReportFailure()
                 }}
-                className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-medium text-white hover:bg-red-500"
+                className={`flex-1 ${btn.danger} py-2.5`}
               >
                 Yes, charge me
               </button>

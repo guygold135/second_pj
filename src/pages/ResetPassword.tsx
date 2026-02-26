@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { loadingState, card, input, btn, alert } from '../styles/designSystem'
 
 export default function ResetPassword() {
   const { updatePassword, session } = useAuth()
@@ -45,8 +46,9 @@ export default function ResetPassword() {
 
   if (hasRecoverySession === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-12">
-        <div className="text-gray-400">Loading…</div>
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#0f172a] px-4 py-12">
+        <div className={loadingState.spinner} aria-hidden />
+        <span className={loadingState.inline}>Loading…</span>
       </div>
     )
   }
@@ -54,9 +56,9 @@ export default function ResetPassword() {
   if (!hasRecoverySession) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-12">
-        <div className="w-full max-w-sm space-y-6 rounded-2xl border border-gray-800 bg-slate-900/60 p-6 text-center">
+        <div className={`w-full max-w-sm space-y-6 ${card} p-6 text-center`}>
           <p className="text-gray-300">Invalid or expired reset link. Request a new one from the sign in page.</p>
-          <Link to="/signin" className="inline-block font-medium text-cyan-400 hover:text-cyan-300">
+          <Link to="/signin" className="inline-block font-medium text-cyan-400 transition-colors hover:text-cyan-300">
             Back to Sign in
           </Link>
         </div>
@@ -67,7 +69,7 @@ export default function ResetPassword() {
   if (success) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-12">
-        <div className="w-full max-w-sm space-y-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center">
+        <div className={`w-full max-w-sm space-y-6 ${card} border-emerald-500/30 bg-emerald-500/10 p-6 text-center`}>
           <p className="text-emerald-200">Password updated. Redirecting to sign in…</p>
         </div>
       </div>
@@ -78,17 +80,13 @@ export default function ResetPassword() {
     <div className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-12">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-wide text-white">MISSION FLOW</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Mission Flow</h1>
           <p className="mt-2 text-sm text-gray-400">Set a new password</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-gray-800 bg-slate-900/60 p-6 shadow-xl">
-          {error && (
-            <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-              {error}
-            </div>
-          )}
+        <form onSubmit={handleSubmit} className={`space-y-5 ${card} p-6`}>
+          {error && <div className={alert.error}>{error}</div>}
           <div>
-            <label htmlFor="password" className="block text-xs font-medium uppercase tracking-wider text-gray-400">
+            <label htmlFor="password" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-400">
               New password
             </label>
             <input
@@ -99,13 +97,13 @@ export default function ResetPassword() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="mt-1.5 w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              className={input.base}
               placeholder="••••••••"
             />
             <p className="mt-1 text-xs text-gray-500">At least 6 characters</p>
           </div>
           <div>
-            <label htmlFor="confirm" className="block text-xs font-medium uppercase tracking-wider text-gray-400">
+            <label htmlFor="confirm" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-400">
               Confirm password
             </label>
             <input
@@ -116,19 +114,15 @@ export default function ResetPassword() {
               onChange={(e) => setConfirm(e.target.value)}
               required
               minLength={6}
-              className="mt-1.5 w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              className={input.base}
               placeholder="••••••••"
             />
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-cyan-600 py-3 font-semibold text-white transition hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading} className={`w-full ${btn.primary} py-3`}>
             {loading ? 'Updating…' : 'Update password'}
           </button>
           <p className="text-center text-sm text-gray-400">
-            <Link to="/signin" className="font-medium text-cyan-400 hover:text-cyan-300">
+            <Link to="/signin" className="font-medium text-cyan-400 transition-colors hover:text-cyan-300">
               Back to Sign in
             </Link>
           </p>

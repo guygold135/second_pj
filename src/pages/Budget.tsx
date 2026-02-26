@@ -5,6 +5,7 @@ import { getRandomQuoteForPage } from '../utils/quotes'
 import { buildDefaultCategories } from '../components/budget/defaultCategories'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useBudget } from '../contexts/BudgetContext'
 import { supabase } from '../lib/supabase'
 import {
   getMonthStartEnd,
@@ -25,50 +26,16 @@ import { CategoryCard } from '../components/budget/CategoryCard'
 import { TransactionForm } from '../components/budget/TransactionForm'
 import { TransactionList } from '../components/budget/TransactionList'
 import { CategoryManager } from '../components/budget/CategoryManager'
+import { btn, card, emptyState, loadingState, pageContainer } from '../styles/designSystem'
 import OpportunityCost, {
   getBlendedRateAndHorizon,
   compoundGrowth,
   type OpportunityCostSaved,
 } from './OpportunityCost'
 
-const STORAGE_KEY = 'budget_app_data'
 const STORAGE_KEY_OPPORTUNITY = 'opportunity_cost_data'
 
 type PeriodType = 'month' | 'quarter' | 'year'
-
-function stripIncomeCategory(budget: Budget): Budget {
-  return {
-    ...budget,
-    categories: budget.categories.filter((c) => c.name.toLowerCase() !== 'income'),
-  }
-}
-
-function normalizeCategoryBudget(c: BudgetCategory): BudgetCategory {
-  const n = typeof c.budget === 'number' ? c.budget : Number(c.budget)
-  return { ...c, budget: Number.isFinite(n) ? n : 0 }
-}
-
-function normalizeBudget(b: Budget): Budget {
-  return { ...b, categories: (b.categories ?? []).map(normalizeCategoryBudget) }
-}
-
-function loadFromLocalStorage(): { budgets: Budget[]; currentId: string } {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { budgets: [], currentId: '' }
-    const data = JSON.parse(raw) as { budgets: Budget[]; currentId: string }
-    const budgets = (data.budgets ?? []).map(stripIncomeCategory).map(normalizeBudget)
-    return { budgets, currentId: data.currentId ?? '' }
-  } catch {
-    return { budgets: [], currentId: '' }
-  }
-}
-
-function saveToLocalStorage(budgets: Budget[], currentId: string) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ budgets, currentId }))
-  } catch (_) {}
-}
 
 function createBudgetForRange(start: string, end: string, createId: () => string): Budget {
   return {
@@ -84,12 +51,9 @@ function createBudgetForRange(start: string, end: string, createId: () => string
 export default function Budget() {
   const { user } = useAuth()
   const { formatMoney } = useCurrency()
+  const { budgets, setBudgets, currentId, setCurrentId, periodStart, setPeriodStart, periodEnd, setPeriodEnd } = useBudget()
   const [motivationQuote] = useState(() => getRandomQuoteForPage('finance'))
-  const [budgets, setBudgets] = useState<Budget[]>([])
-  const [currentId, setCurrentId] = useState('')
   const [periodType, setPeriodType] = useState<PeriodType>('month')
-  const [periodStart, setPeriodStart] = useState('')
-  const [periodEnd, setPeriodEnd] = useState('')
   const [showTransactionForm, setShowTransactionForm] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<BudgetTransaction | null>(null)
   const [showCategoryManager, setShowCategoryManager] = useState(false)
@@ -97,7 +61,6 @@ export default function Budget() {
   const [showInvestmentProfileModal, setShowInvestmentProfileModal] = useState(false)
   const [opportunityCostSaved, setOpportunityCostSaved] = useState<OpportunityCostSaved | null>(null)
   const transactionFormRef = useRef<HTMLElement | null>(null)
-  const hasLoadedRef = useRef(false)
   const prevModalOpenRef = useRef(false)
 
   const currentBudget = budgets.find((b) => b.id === currentId)
@@ -114,76 +77,6 @@ export default function Budget() {
           .map((c) => ({ spentAmount: spent[c.id] ?? 0, colorHex: getCategoryColorHex(c.color ?? 'text-white'), name: c.name }))
           .sort((a, b) => b.spentAmount - a.spentAmount)
       : []
-
-  // Load from Supabase or localStorage on mount
-  useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      if (supabase && user) {
-        try {
-          if (import.meta.env.DEV) console.log('[Budget] Loading from Supabase...')
-          const { data, error } = await supabase
-            .from('budget_data')
-            .select('current_id, budgets')
-            .eq('id', user.id)
-            .maybeSingle()
-          if (cancelled) return
-          if (error) throw error
-          if (data != null && Array.isArray(data.budgets)) {
-            const loaded = (data.budgets as Budget[]).map(stripIncomeCategory).map(normalizeBudget)
-            const loadedId = (data.current_id as string) ?? ''
-            setBudgets(loaded)
-            setCurrentId(loadedId || (loaded[0]?.id ?? ''))
-            if (loaded.length > 0 && loadedId && loaded.some((b) => b.id === loadedId)) {
-              const b = loaded.find((x) => x.id === loadedId)!
-              setPeriodStart(b.startDate)
-              setPeriodEnd(b.endDate)
-            } else if (loaded[0]) {
-              setPeriodStart(loaded[0].startDate)
-              setPeriodEnd(loaded[0].endDate)
-            }
-            if (!cancelled) setTimeout(() => { hasLoadedRef.current = true }, 0)
-            return
-          }
-        } catch (e) {
-          if (import.meta.env.DEV) console.error('[Budget] Load from Supabase failed:', e)
-        }
-      }
-      if (!cancelled) {
-        const { budgets: loaded, currentId: loadedId } = loadFromLocalStorage()
-        if (loaded.length > 0 && loadedId && loaded.some((b) => b.id === loadedId)) {
-          setBudgets(loaded)
-          setCurrentId(loadedId)
-          const b = loaded.find((x) => x.id === loadedId)!
-          setPeriodStart(b.startDate)
-          setPeriodEnd(b.endDate)
-        } else {
-          setBudgets(loaded)
-          const now = new Date()
-          const r =
-            periodType === 'month'
-              ? getMonthStartEnd(now)
-              : periodType === 'quarter'
-                ? getQuarterStartEnd(now)
-                : getYearStartEnd(now)
-          const start = r.start
-          const end = r.end
-          setPeriodStart(start)
-          setPeriodEnd(end)
-          const existing = loaded.find((b) => b.startDate === start && b.endDate === end)
-          if (existing) setCurrentId(existing.id)
-          else {
-            const newBudget = createBudgetForRange(start, end, () => uuidv4())
-            setBudgets((prev) => [...prev, newBudget])
-            setCurrentId(newBudget.id)
-          }
-        }
-        setTimeout(() => { hasLoadedRef.current = true }, 0)
-      }
-    }
-    run()
-    return () => { cancelled = true }
-  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- init when user changes
 
   const loadOpportunityCost = useCallback(async () => {
     if (supabase && user) {
@@ -222,43 +115,6 @@ export default function Budget() {
     }
     prevModalOpenRef.current = showInvestmentProfileModal
   }, [showInvestmentProfileModal, loadOpportunityCost])
-
-  // Persist to Supabase or localStorage on change (after initial load)
-  useEffect(() => {
-    if (!hasLoadedRef.current) return
-    if (supabase && !user) return
-
-    const client = supabase
-    if (client && user) {
-      const save = async () => {
-        try {
-          const userId = user.id
-          if (import.meta.env.DEV) console.log('[Budget] Writing to Supabase:', budgets.length, 'budgets')
-          const { error: upsertError } = await client
-            .from('budget_data')
-            .upsert(
-              { id: userId, current_id: currentId, budgets, user_id: userId },
-              { onConflict: 'id' }
-            )
-          if (upsertError) throw upsertError
-          if (import.meta.env.DEV) console.log('[Budget] Supabase: budget_data upsert OK')
-          const { data: existing } = await client.from('budget_data').select('id').eq('user_id', userId)
-          const toDelete = (existing ?? []).filter((r: { id: string }) => r.id !== userId).map((r: { id: string }) => r.id)
-          if (toDelete.length > 0) {
-            const { error: deleteError } = await client.from('budget_data').delete().in('id', toDelete)
-            if (deleteError) throw deleteError
-            if (import.meta.env.DEV) console.log('[Budget] Supabase: deleted', toDelete.length, 'stale row(s)')
-          }
-        } catch (e) {
-          console.error('[Budget] Save to Supabase failed:', e)
-        }
-      }
-      save()
-    } else {
-      if (import.meta.env.DEV) console.log('[Budget] Supabase not configured, saving to localStorage only')
-      saveToLocalStorage(budgets, currentId)
-    }
-  }, [budgets, currentId, user?.id])
 
   useEffect(() => {
     if (!showTransactionForm) return
@@ -409,9 +265,9 @@ export default function Budget() {
     : `Total expenses & budget in ${selectedPeriodLabel}`
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-8 flex items-center gap-3 rounded-lg border border-emerald-300/40 bg-slate-900 px-4 py-3">
-        <svg className="h-5 w-5 shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div className={`${pageContainer} mx-auto max-w-4xl`}>
+      <div className="mb-8 flex items-center gap-3 rounded-xl border border-cyan-500/30 bg-slate-900/60 px-4 py-3">
+        <svg className="h-5 w-5 shrink-0 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
         </svg>
         <span className="flex-1 bg-transparent text-white" aria-hidden="true">
@@ -423,7 +279,7 @@ export default function Budget() {
         <button
           type="button"
           onClick={() => setShowInvestmentProfileModal(true)}
-          className="rounded-lg border border-cyan-500/60 bg-slate-900 px-4 py-2 text-sm font-medium text-cyan-300 hover:bg-cyan-500/20 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+          className={btn.outline}
         >
           Set my investment profile
         </button>
@@ -437,7 +293,7 @@ export default function Budget() {
         <select
           value={periodType}
           onChange={(e) => changePeriodType(e.target.value as PeriodType)}
-          className="rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
+          className="rounded-lg border border-gray-700 bg-slate-800 px-3 py-2 text-white transition-colors focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
           aria-label="Budget period type"
         >
           <option value="month">Month</option>
@@ -549,34 +405,45 @@ export default function Budget() {
             const blend = getBlendedRateAndHorizon(opportunityCostSaved)
             const projected = blend && amount > 0 ? compoundGrowth(amount, blend.rate, blend.horizonYears) : null
             return (
-              <div className="rounded-xl border border-gray-800 bg-slate-900/50 p-4">
-                <p className="text-sm text-gray-300">
-                  {isSurplus ? (
-                    <>You&apos;re under budget by <span className="font-semibold text-emerald-400">{formatMoney(amount)}</span> this period.</>
-                  ) : (
-                    <>Overspend this period: <span className="font-semibold text-amber-400">{formatMoney(amount)}</span>.</>
-                  )}
-                </p>
-                {blend && projected != null && projected > 0 ? (
-                  <p className="mt-2 text-sm text-gray-300">
-                    If invested, this could grow to{' '}
-                    <span className="font-semibold text-cyan-400">{formatMoney(Math.round(projected))}</span>
-                    {' '}in {blend.horizonYears} years.
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowInvestmentProfileModal(true)}
-                    className="mt-2 text-sm font-medium text-cyan-400 hover:text-cyan-300 hover:underline"
-                  >
-                    Set your investment profile to see the long-term impact
-                  </button>
-                )}
+              <div className={`rounded-xl border p-5 ${isSurplus ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 shrink-0 text-xl">{isSurplus ? '🎯' : '⚠️'}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {isSurplus ? (
+                        <>Under budget by <span className="text-emerald-400">{formatMoney(amount)}</span> this period</>
+                      ) : (
+                        <>Over budget by <span className="text-red-400">{formatMoney(amount)}</span> this period</>
+                      )}
+                    </p>
+                    {blend && projected != null && projected > 0 ? (
+                      <p className="mt-2 text-sm text-gray-400">
+                        {isSurplus ? (
+                          <>If you invested this surplus, it could grow to{' '}
+                            <span className="font-bold text-emerald-400">{formatMoney(Math.round(projected))}</span>
+                            {' '}in {blend.horizonYears} years.</>
+                        ) : (
+                          <>That overspend would have been worth{' '}
+                            <span className="font-bold text-red-300">{formatMoney(Math.round(projected))}</span>
+                            {' '}in {blend.horizonYears} years if invested. Every overspend has a future cost.</>
+                        )}
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowInvestmentProfileModal(true)}
+                        className="mt-2 text-sm font-medium text-cyan-400 hover:text-cyan-300 hover:underline"
+                      >
+                        Set your investment profile to see the real long-term cost →
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )
           })()}
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2">
             <button
               type="button"
               onClick={() => {
@@ -584,7 +451,7 @@ export default function Budget() {
                 setShowCategoryManager(false)
                 setShowTransactionForm(true)
               }}
-              className="flex items-center gap-2 rounded-lg bg-cyan-600 py-2.5 px-4 font-medium text-white hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              className={`flex items-center gap-2 ${btn.primary}`}
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -598,14 +465,14 @@ export default function Budget() {
                 setShowCategoryManager((v) => !v)
                 setEditingCategoryId(null)
               }}
-              className="rounded-lg border border-gray-600 bg-slate-800 py-2.5 px-4 font-medium text-gray-200 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              className={btn.secondary}
             >
               {showCategoryManager ? 'Hide categories' : 'Manage categories'}
             </button>
           </div>
 
           {showCategoryManager && (
-            <section className="rounded-xl border border-gray-800 bg-slate-900/60 p-4" aria-label="Category management">
+            <section className={`${card} p-4`} aria-label="Category management">
               <CategoryManager
                 categories={categoriesNoIncome}
                 initialEditId={editingCategoryId}
@@ -651,14 +518,14 @@ export default function Budget() {
           <section>
             <h2 className="mb-3 text-sm font-semibold text-gray-300">Transactions</h2>
             {currentBudget.transactions.length === 0 && !showTransactionForm ? (
-              <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800 bg-slate-900/40 py-16 text-center text-gray-300">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-gray-800">
+              <div className={emptyState.wrapper}>
+                <div className={emptyState.icon}>
                   <svg className="h-8 w-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <p className="mb-2">No transactions yet.</p>
-                <p className="text-sm text-gray-500">Click &quot;Add Entry&quot; to add your first income or expense.</p>
+                <p className={emptyState.title}>No transactions yet.</p>
+                <p className={emptyState.subtitle}>Click &quot;Add expense&quot; to add your first transaction.</p>
               </div>
             ) : (
               <TransactionList
@@ -673,32 +540,33 @@ export default function Budget() {
       )}
 
       {!currentBudget && (
-        <div className="rounded-xl border border-gray-800 bg-slate-900/40 py-12 text-center text-gray-400">
-          Loading budget…
+        <div className={loadingState.box}>
+          <div className={loadingState.spinner} aria-hidden />
+          <span>Loading budget…</span>
         </div>
       )}
 
       {/* Investment profile modal */}
       {showInvestmentProfileModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setShowInvestmentProfileModal(false)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="investment-profile-modal-title"
         >
           <div
-            className="flex max-h-[90vh] w-full max-w-[700px] flex-col rounded-xl border border-gray-800 bg-slate-900 shadow-xl"
+            className="flex max-h-[90vh] w-full max-w-[700px] flex-col rounded-xl border border-gray-800 bg-slate-900 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex shrink-0 items-center justify-between border-b border-gray-800 bg-slate-900 px-4 py-3">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-800 px-4 py-3">
               <h2 id="investment-profile-modal-title" className="text-lg font-semibold text-white">
                 My Investment Profile
               </h2>
               <button
                 type="button"
                 onClick={() => setShowInvestmentProfileModal(false)}
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-300 hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
               >
                 Close
               </button>

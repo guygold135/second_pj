@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import type { BudgetCategory } from '../../types'
 import { getCategoryColorHex } from './categoryColors'
+import { input } from '../../styles/designSystem'
+import { btn } from '../../styles/designSystem'
 
 interface CategoryManagerProps {
   categories: BudgetCategory[]
@@ -74,7 +76,7 @@ function ColorSelect({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex min-w-[135px] items-center gap-2 rounded border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+        className={`flex min-w-[135px] items-center gap-2 ${input.select}`}
       >
         <span className="h-4 w-4 shrink-0 rounded-full border border-gray-600" style={{ backgroundColor: selected.hex }} aria-hidden />
         <span>{selected.label}</span>
@@ -191,7 +193,7 @@ export function CategoryManager({ categories, initialEditId, onCloseSingleEdit, 
             placeholder="Budget"
           />
           <ColorSelect value={editColor} onChange={setEditColor} />
-          <button type="button" onClick={() => saveEdit(true)} className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-500">
+          <button type="button" onClick={() => saveEdit(true)} className={btn.primary}>
             Done
           </button>
         </div>
@@ -207,7 +209,7 @@ export function CategoryManager({ categories, initialEditId, onCloseSingleEdit, 
           <button
             type="button"
             onClick={() => setShowForm(true)}
-            className="rounded-lg border border-cyan-500/60 bg-cyan-500/10 px-3 py-1.5 text-sm font-medium text-cyan-300 hover:bg-cyan-500/20 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            className={btn.outline}
           >
             + Add category
           </button>
@@ -230,16 +232,13 @@ export function CategoryManager({ categories, initialEditId, onCloseSingleEdit, 
               placeholder="Budget"
               className="w-24 rounded-lg border border-gray-700 bg-slate-900 px-3 py-1.5 text-sm text-white focus:border-cyan-500 focus:outline-none"
             />
-            <button
-              type="submit"
-              className="rounded-lg bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500"
-            >
+            <button type="submit" className={btn.primary}>
               Save
             </button>
             <button
               type="button"
               onClick={() => { setShowForm(false); setNewName(''); setNewBudget('') }}
-              className="rounded-lg border border-gray-600 px-3 py-1.5 text-sm text-gray-300 hover:bg-slate-800"
+              className={btn.secondary}
             >
               Cancel
             </button>

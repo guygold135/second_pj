@@ -1,5 +1,6 @@
 import { useState, useId, useEffect, useRef } from 'react'
 import type { BudgetCategory, BudgetTransaction } from '../../types'
+import { card, input, btn } from '../../styles/designSystem'
 
 interface TransactionFormProps {
   categories: BudgetCategory[]
@@ -94,7 +95,7 @@ export function TransactionForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-gray-800 bg-slate-900/70 p-4">
+    <form onSubmit={handleSubmit} className={`space-y-4 ${card} p-4`}>
       <div>
         <label htmlFor={amountId} className="mb-1 block text-xs font-medium text-gray-400">
           Amount *
@@ -110,9 +111,7 @@ export function TransactionForm({
             if (amountError) setAmountError('')
           }}
           onKeyDown={(e) => handleArrowNav(e, 0)}
-          className={`w-full rounded-lg border bg-slate-900 px-4 py-3 text-white focus:outline-none focus:ring-1 ${
-            amountError ? 'border-red-500' : 'border-gray-700 focus:border-cyan-500 focus:ring-cyan-500'
-          }`}
+          className={amountError ? input.error : input.base}
           placeholder="0.00"
           aria-invalid={!!amountError}
           aria-describedby={amountError ? `${amountId}-error` : undefined}
@@ -134,7 +133,7 @@ export function TransactionForm({
           ref={categoryRef}
           onChange={(e) => setCategoryId(e.target.value)}
           onKeyDown={(e) => handleArrowNav(e, 1)}
-          className="w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+          className={input.select}
         >
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
@@ -155,7 +154,7 @@ export function TransactionForm({
           ref={descRef}
           onChange={(e) => setDescription(e.target.value)}
           onKeyDown={(e) => handleArrowNav(e, 2)}
-          className="w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+          className={input.base}
           placeholder="e.g. Weekly groceries"
         />
       </div>
@@ -173,23 +172,16 @@ export function TransactionForm({
           ref={dateRef}
           onChange={(e) => setDate(e.target.value)}
           onKeyDown={(e) => handleArrowNav(e, 3)}
-          className="w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+          className={input.base}
         />
       </div>
 
       <div className="flex gap-2">
-        <button
-          type="submit"
-          className="flex-1 rounded-lg bg-cyan-600 py-2.5 font-medium text-white hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-        >
+        <button type="submit" className={`flex-1 ${btn.primary}`}>
           Save
         </button>
         {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-lg border border-gray-600 px-4 py-2.5 font-medium text-gray-300 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-gray-500"
-          >
+          <button type="button" onClick={onCancel} className={btn.secondary}>
             Cancel
           </button>
         )}

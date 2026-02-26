@@ -4,8 +4,11 @@ import { useMissions, GOAL_FILTER_PREFIX, type Mission, type Recurrence } from '
 import { getRandomQuoteForPage } from '../utils/quotes'
 import { v4 as uuidv4 } from 'uuid'
 import { StakeSetupModal, StakeBadge, type StakeInfo } from '../components/StakeSetupModal'
+import { GlowButton } from '../components/ui/glow-button'
+import { GlowingEffect } from '../components/ui/glowing-effect'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { btn } from '../styles/designSystem'
 
 function GoalIcon({ mode }: { mode?: GoalTrackingMode }) {
   const m = mode ?? 'missions_equal'
@@ -739,7 +742,7 @@ export default function Goals() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6 flex items-start gap-3 rounded-lg border border-purple-500/40 bg-slate-900 px-4 py-3">
         <svg className="mt-0.5 h-5 w-5 shrink-0 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
@@ -750,16 +753,11 @@ export default function Goals() {
       </div>
 
       {!showAddForm && !justAddedGoal && (
-        <button
-          type="button"
+        <GlowButton
+          label="Create New Goal"
           onClick={openAddForm}
           className="mb-8 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 font-medium text-white hover:bg-blue-500 sm:w-auto sm:px-6"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Create New Goal
-        </button>
+        />
       )}
 
       <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800 bg-slate-900/40 py-20 text-center text-gray-300">
@@ -1161,23 +1159,32 @@ export default function Goals() {
                 {chargeSuccessMessage}
               </div>
             )}
-          <ul className="grid w-full grid-cols-1 gap-4 px-4 text-left sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid w-full grid-cols-1 gap-4 px-4 text-left sm:grid-cols-2">
             {goals.map((goal) => {
               const progress = getGoalProgressFromMissions(goal, missions)
               const goalMissions = missions
                 .filter((m) => m.goalId === goal.id)
                 .sort((a, b) => (a.orderInCategory ?? 0) - (b.orderInCategory ?? 0))
-              const displayMissions = goalMissions.slice(0, 3)
+              const displayMissions = goalMissions.slice(0, 2)
               return (
               <li
                 key={goal.id}
-                className={`group relative rounded-xl border transition hover:border-gray-600 ${
+                className={`group relative flex min-h-[18rem] flex-col rounded-xl border transition hover:border-gray-600 ${
                   successFlashGoalId === goal.id
                     ? 'border-emerald-500/70 bg-emerald-500/10 shadow-lg shadow-emerald-500/20'
                     : 'border-gray-700 bg-slate-900/70 shadow-lg shadow-black/20'
                 }`}
               >
-                <div className="flex flex-col p-4">
+                <div className="absolute inset-0 rounded-[inherit]">
+                  <GlowingEffect
+                    spread={40}
+                    glow
+                    disabled={false}
+                    proximity={64}
+                    inactiveZone={0.01}
+                    borderWidth={2}
+                  />
+                  <div className="relative z-10 flex flex-col flex-1 p-4">
                   {/* Goal Header */}
                   <div className="mb-3">
                     <div className="mb-2 flex items-center gap-2">
@@ -1372,12 +1379,13 @@ export default function Goals() {
                     )}
                   </div>
                 </div>
+                </div>
                 
                 {/* Delete Button */}
                 <button
                   type="button"
                   onClick={() => deleteGoal(goal.id)}
-                  className="absolute right-2 top-2 rounded-lg p-1.5 text-gray-400 opacity-0 transition-[opacity,color] duration-150 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 focus:outline-none focus:opacity-100 focus:ring-2 focus:ring-red-400/50"
+                  className={`absolute right-2 top-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100 ${btn.iconDanger}`}
                   aria-label="Delete goal"
                 >
                   <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

@@ -2,6 +2,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { card, input, btn, alert } from '../styles/designSystem'
 
 export default function SignIn() {
   const { signIn, resetPasswordForEmail, checkEmailExists } = useAuth()
@@ -38,7 +39,6 @@ export default function SignIn() {
       setError('Email not found.')
       return
     }
-    // If RPC failed (e.g. function not deployed), send reset anyway so valid emails still work
     const { error: err } = await resetPasswordForEmail(email.trim())
     setLoading(false)
     if (err) {
@@ -59,22 +59,18 @@ export default function SignIn() {
       <div className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-12">
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-wide text-white">MISSION FLOW</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-white">Mission Flow</h1>
             <p className="mt-2 text-sm text-gray-400">Reset your password</p>
           </div>
-          <form onSubmit={handleForgotSubmit} className="space-y-5 rounded-2xl border border-gray-800 bg-slate-900/60 p-6 shadow-xl">
-            {error && (
-              <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                {error}
-              </div>
-            )}
+          <form onSubmit={handleForgotSubmit} className={`space-y-5 ${card} p-6`}>
+            {error && <div className={alert.error}>{error}</div>}
             {resetSent && (
-              <div className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+              <div className={alert.success}>
                 Check your email for a link to reset your password.
               </div>
             )}
             <div>
-              <label htmlFor="forgot-email" className="block text-xs font-medium uppercase tracking-wider text-gray-400">
+              <label htmlFor="forgot-email" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-400">
                 Email
               </label>
               <input
@@ -84,15 +80,11 @@ export default function SignIn() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="mt-1.5 w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                className={input.base}
                 placeholder="you@example.com"
               />
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-cyan-600 py-3 font-semibold text-white transition hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50"
-            >
+            <button type="submit" disabled={loading} className={`w-full ${btn.primary} py-3`}>
               {loading ? 'Sending…' : 'Send reset link'}
             </button>
             <button
@@ -102,7 +94,7 @@ export default function SignIn() {
                 setError(null)
                 setResetSent(false)
               }}
-              className="w-full text-center text-sm text-gray-400 hover:text-white"
+              className="w-full text-center text-sm text-gray-400 transition-colors hover:text-white"
             >
               ← Back to sign in
             </button>
@@ -116,17 +108,13 @@ export default function SignIn() {
     <div className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-12">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-wide text-white">MISSION FLOW</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Mission Flow</h1>
           <p className="mt-2 text-sm text-gray-400">Sign in to your account</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-gray-800 bg-slate-900/60 p-6 shadow-xl">
-          {error && (
-            <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-              {error}
-            </div>
-          )}
+        <form onSubmit={handleSubmit} className={`space-y-5 ${card} p-6`}>
+          {error && <div className={alert.error}>{error}</div>}
           <div>
-            <label htmlFor="email" className="block text-xs font-medium uppercase tracking-wider text-gray-400">
+            <label htmlFor="email" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-400">
               Email
             </label>
             <input
@@ -136,24 +124,24 @@ export default function SignIn() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="mt-1.5 w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              className={input.base}
               placeholder="you@example.com"
             />
           </div>
           <div>
-            <div className="flex items-center justify-between">
+            <div className="mb-1.5 flex items-center justify-between">
               <label htmlFor="password" className="block text-xs font-medium uppercase tracking-wider text-gray-400">
                 Password
               </label>
               <button
                 type="button"
                 onClick={() => setShowForgotPassword(true)}
-                className="text-xs text-cyan-400 hover:text-cyan-300"
+                className="text-xs text-cyan-400 transition-colors hover:text-cyan-300"
               >
                 Forgot password?
               </button>
             </div>
-            <div className="relative mt-1.5">
+            <div className="relative">
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
@@ -161,13 +149,13 @@ export default function SignIn() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 pr-11 text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                className={`${input.base} pr-11`}
                 placeholder="••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((p) => !p)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1.5 text-gray-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-gray-400 transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? (
@@ -178,16 +166,12 @@ export default function SignIn() {
               </button>
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-cyan-600 py-3 font-semibold text-white transition hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading} className={`w-full ${btn.primary} py-3`}>
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
           <p className="text-center text-sm text-gray-400">
             Don&apos;t have an account?{' '}
-            <Link to="/signup" className="font-medium text-cyan-400 hover:text-cyan-300">
+            <Link to="/signup" className="font-medium text-cyan-400 transition-colors hover:text-cyan-300">
               Sign up
             </Link>
           </p>
