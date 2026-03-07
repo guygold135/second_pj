@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback, forwardRef } from 'react'
 import { useGoals, type Goal, type GoalTrackingMode } from '../contexts/GoalsContext'
 import { useMissions, GOAL_FILTER_PREFIX, type Mission, type Recurrence } from '../contexts/MissionsContext'
-import { getRandomQuoteForPage } from '../utils/quotes'
 import { v4 as uuidv4 } from 'uuid'
 import { StakeSetupModal, StakeBadge, type StakeInfo } from '../components/StakeSetupModal'
 import { GlowButton } from '../components/ui/glow-button'
@@ -239,8 +238,87 @@ const WheelColumn = forwardRef(function WheelColumn({
   )
 })
 
+function DurationCombobox({
+  value,
+  onChange,
+  options,
+  min,
+  max,
+  label,
+  ariaLabel,
+}: {
+  value: number
+  onChange: (n: number) => void
+  options: number[]
+  min: number
+  max: number
+  label: string
+  ariaLabel: string
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
+        onFocus={(e) => {
+          setOpen(true)
+          ;(e.target as HTMLInputElement).select()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            onChange(Math.min(max, Math.max(min, Number((e.target as HTMLInputElement).value) || 0)))
+            setOpen(false)
+          }
+        }}
+        className="w-14 rounded-lg border border-gray-600 bg-slate-900 px-2 py-1 text-center text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        placeholder="0"
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      />
+      {open && (
+        <ul
+          className="absolute left-0 top-full z-10 mt-1 max-h-40 w-14 overflow-auto rounded-lg border border-gray-600 bg-slate-900 py-1 shadow-lg"
+          role="listbox"
+        >
+          {options.map((opt) => (
+            <li
+              key={opt}
+              role="option"
+              aria-selected={value === opt}
+              onClick={() => {
+                onChange(opt)
+                setOpen(false)
+              }}
+              className="cursor-pointer px-2 py-1 text-center text-white hover:bg-slate-700"
+            >
+              {String(opt).padStart(2, '0')}{label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export default function Goals() {
-  const [motivationQuote] = useState(() => getRandomQuoteForPage('goals'))
   const { goals, addGoal: addGoalToContext, updateGoal, deleteGoal } = useGoals()
   const { missions, setMissions } = useMissions()
   const [showAddForm, setShowAddForm] = useState(false)
@@ -248,6 +326,13 @@ export default function Goals() {
   const [trackingMode, setTrackingMode] = useState<GoalTrackingMode>('missions_equal')
   /** After adding a goal, we show measurement step or add-mission panel; null when done. */
   const [justAddedGoal, setJustAddedGoal] = useState<Goal | null>(null)
+  /** When set, user is in add-missions flow but goal not created yet; goal is created only on Done. */
+  const [pendingGoalCreation, setPendingGoalCreation] = useState<{ title: string; trackingMode: 'missions_equal' | 'missions_weighted' } | null>(null)
+  /** Missions to add when user presses Done (only when pendingGoalCreation is set). */
+  const [pendingMissions, setPendingMissions] = useState<Array<{ id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }>>([])
+  /** Goal currently being edited in the modal (separate from creation flow). */
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
+  const [showEditGoalModal, setShowEditGoalModal] = useState(false)
   // Time mode: measurement step
   const [targetHours, setTargetHours] = useState(0)
   const [timeLabel, setTimeLabel] = useState('')
@@ -298,6 +383,8 @@ export default function Goals() {
     setShowAddForm(true)
     setNewGoalTitle('')
     setJustAddedGoal(null)
+    setPendingGoalCreation(null)
+    setPendingMissions([])
     setAddGoalTitleError(false)
   }
 
@@ -308,21 +395,31 @@ export default function Goals() {
       return
     }
     setAddGoalTitleError(false)
-    const newGoal = addGoalToContext(title, trackingMode)
     setNewGoalTitle('')
     setShowAddForm(false)
-    if (newGoal) setJustAddedGoal(newGoal)
+    const isMissionsMode = trackingMode === 'missions_equal' || trackingMode === 'missions_weighted'
+    if (isMissionsMode) {
+      setPendingGoalCreation({ title, trackingMode })
+    } else {
+      const newGoal = addGoalToContext(title, trackingMode)
+      if (newGoal) setJustAddedGoal(newGoal)
+    }
   }
 
   const cancelAdd = () => {
     setShowAddForm(false)
     setNewGoalTitle('')
     setJustAddedGoal(null)
+    setPendingGoalCreation(null)
+    setPendingMissions([])
     setAddGoalTitleError(false)
   }
 
   const closeJustAdded = () => {
+    if (justAddedGoal) deleteGoal(justAddedGoal.id)
     setJustAddedGoal(null)
+    setPendingGoalCreation(null)
+    setPendingMissions([])
     setTargetHours(0)
     setTimeLabel('')
     setGoalTargetCount(1)
@@ -473,22 +570,58 @@ export default function Goals() {
     [goalStakes, stakeFunctionUrl, stakeToken],
   )
 
-  const isWeighted = justAddedGoal?.trackingMode === 'missions_weighted'
+  const formGoal = pendingGoalCreation ?? justAddedGoal
+  const isWeighted = formGoal?.trackingMode === 'missions_weighted'
   const categoryForGoal = justAddedGoal ? `${GOAL_FILTER_PREFIX}${justAddedGoal.id}` : ''
   const missionsForThisGoal = missions.filter((m) => m.goalId === justAddedGoal?.id)
-  const sessionMissions = missionsForThisGoal.filter((m) => sessionMissionIds.includes(m.id))
-  const totalWeightUsed = missionsForThisGoal.reduce((sum, m) => sum + (m.weightPercent ?? 0), 0)
+  const sessionMissionsFromContext = missionsForThisGoal.filter((m) => sessionMissionIds.includes(m.id))
+  const sessionMissions = pendingGoalCreation ? pendingMissions : sessionMissionsFromContext
+  const totalWeightUsed = pendingGoalCreation
+    ? pendingMissions.reduce((sum, m) => sum + (m.weightPercent ?? 0), 0)
+    : missionsForThisGoal.reduce((sum, m) => sum + (m.weightPercent ?? 0), 0)
   const freePercent = Math.max(0, 100 - totalWeightUsed)
 
   const addMissionForGoal = (andOpenNew: boolean) => {
-    if (!justAddedGoal) return
+    if (!formGoal) return
     const title = newMissionTitle.trim()
     if (!title) return
-    const category = categoryForGoal
     const durationStr = showMissionDuration ? `${newMissionHours}h ${newMissionMinutes}m` : '0h 0m'
     const weight = isWeighted ? Math.min(100, Math.max(0, newMissionWeightPercent)) : undefined
     const targetCount = showMissionTargetCount ? newMissionTargetCount : undefined
 
+    if (pendingGoalCreation) {
+      if (editingMissionId && pendingMissions.some((m) => m.id === editingMissionId)) {
+        setPendingMissions((prev) =>
+          prev.map((m) =>
+            m.id === editingMissionId
+              ? { ...m, title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight }
+              : m,
+          ),
+        )
+        setEditingMissionId(null)
+      } else {
+        setPendingMissions((prev) => [
+          { id: uuidv4(), title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight },
+          ...prev,
+        ])
+      }
+      setNewMissionTitle('')
+      setNewMissionRecurrence('none')
+      setNewMissionHours(0)
+      setNewMissionMinutes(30)
+      setNewMissionTargetCount(1)
+      setNewMissionWeightPercent(0)
+      setShowMissionDuration(false)
+      setShowMissionTargetCount(false)
+      if (!andOpenNew) {
+        const listToAdd = [{ id: uuidv4(), title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight }, ...pendingMissions]
+        doneMissionsForGoal(listToAdd)
+      }
+      return
+    }
+
+    if (!justAddedGoal) return
+    const category = categoryForGoal
     if (editingMissionId) {
       setMissions((prev) =>
         prev.map((m) =>
@@ -541,7 +674,7 @@ export default function Goals() {
     if (!andOpenNew) closeJustAdded()
   }
 
-  const loadMissionIntoForm = (mission: Mission) => {
+  const loadMissionIntoForm = (mission: Mission | { id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }) => {
     setNewMissionTitle(mission.title)
     setNewMissionRecurrence(mission.recurrence)
     setNewMissionWeightPercent(mission.weightPercent ?? 0)
@@ -556,14 +689,49 @@ export default function Goals() {
     setEditingMissionId(mission.id)
   }
 
-  const doneMissionsForGoal = () => {
-    if (isWeighted && totalWeightUsed < 100) {
+  const doneMissionsForGoal = (missionsToAdd?: Array<{ id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }>) => {
+    const list = missionsToAdd ?? pendingMissions
+    const totalToCheck = list.reduce((s, m) => s + (m.weightPercent ?? 0), 0)
+    if (isWeighted && totalToCheck < 100) {
       alert('There is not enough percentage. Total weight must equal 100%.')
       return
     }
     const title = newMissionTitle.trim()
     if (title) addMissionForGoal(false)
-    else closeJustAdded()
+    else if (pendingGoalCreation) {
+      const newGoal = addGoalToContext(pendingGoalCreation.title, pendingGoalCreation.trackingMode)
+      if (newGoal) {
+        const category = `${GOAL_FILTER_PREFIX}${newGoal.id}`
+        const newMissionEntries = list.map((pm, index) => ({
+          id: pm.id,
+          title: pm.title,
+          category,
+          recurrence: pm.recurrence,
+          duration: pm.duration,
+          targetCount: pm.targetCount,
+          progressCount: pm.targetCount != null ? 0 : undefined,
+          createdAt: new Date().toISOString(),
+          isCompleted: false,
+          orderInCategory: index,
+          goalId: newGoal.id,
+          weightPercent: pm.weightPercent,
+        }))
+        setMissions((prev) => [...newMissionEntries, ...prev])
+      }
+      setPendingGoalCreation(null)
+      setPendingMissions([])
+      setNewMissionTitle('')
+      setNewMissionRecurrence('none')
+      setNewMissionHours(0)
+      setNewMissionMinutes(30)
+      setNewMissionTargetCount(1)
+      setNewMissionWeightPercent(0)
+      setShowMissionDuration(false)
+      setShowMissionTargetCount(false)
+      setEditingMissionId(null)
+      setSessionMissionIds([])
+      setJustAddedGoal(null)
+    } else closeJustAdded()
   }
 
   // --- Time tracking: manual log + live timer ---
@@ -741,18 +909,49 @@ export default function Goals() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount
 
+  const startEditGoal = (goal: Goal) => {
+    setEditingGoal(goal)
+    setNewGoalTitle(goal.title)
+    setTrackingMode(goal.trackingMode ?? 'missions_equal')
+    setTargetHours(goal.targetHours ?? 0)
+    setTimeLabel(goal.timeLabel ?? '')
+    setGoalTargetCount(goal.targetCount ?? 1)
+    setMilestoneLabel(goal.milestoneLabel ?? '')
+    setCountMilestoneError(false)
+    setCountTargetError(false)
+    setTimeTargetError(false)
+    setAddGoalTitleError(false)
+    setShowAddForm(false)
+    setJustAddedGoal(null)
+    setShowEditGoalModal(true)
+  }
+
+  const saveEditedGoal = () => {
+    if (!editingGoal) return
+    const title = newGoalTitle.trim()
+    if (!title) {
+      setAddGoalTitleError(true)
+      return
+    }
+    const updates: Partial<Goal> = {
+      title,
+      trackingMode,
+    }
+    if (trackingMode === 'time') {
+      updates.targetHours = targetHours || undefined
+      updates.timeLabel = timeLabel.trim() || undefined
+    } else if (trackingMode === 'count') {
+      updates.targetCount = goalTargetCount || undefined
+      updates.milestoneLabel = milestoneLabel.trim() || undefined
+    }
+    updateGoal(editingGoal.id, updates)
+    setShowEditGoalModal(false)
+    setEditingGoal(null)
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-6 flex items-start gap-3 rounded-lg border border-purple-500/40 bg-slate-900 px-4 py-3">
-        <svg className="mt-0.5 h-5 w-5 shrink-0 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-        </svg>
-        <span className="flex-1 bg-transparent text-white" aria-hidden="true">
-          {motivationQuote}
-        </span>
-      </div>
-
-      {!showAddForm && !justAddedGoal && (
+      {!justAddedGoal && (
         <GlowButton
           label="Create New Goal"
           onClick={openAddForm}
@@ -760,135 +959,337 @@ export default function Goals() {
         />
       )}
 
-      <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800 bg-slate-900/40 py-20 text-center text-gray-300">
-        {justAddedGoal ? (
-          <div className="w-full max-w-md space-y-4 px-4">
-            {(justAddedGoal.trackingMode === 'missions_equal' || justAddedGoal.trackingMode === 'missions_weighted') ? (
-              <>
-                <p className="text-left text-sm font-medium text-gray-300">
-                  Add missions for &quot;{justAddedGoal.title}&quot; (stays under this goal)
+      {showAddForm && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) cancelAdd()
+          }}
+        >
+          <div className="w-full max-w-md rounded-xl border border-gray-800 bg-slate-900 shadow-2xl transition-all duration-200">
+            <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+              <p id="add-goal-modal-title" className="text-sm font-semibold text-white">
+                Create New Goal
+              </p>
+              <button
+                type="button"
+                onClick={cancelAdd}
+                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div
+              id="add-goal-form"
+              className="space-y-4 px-4 py-3 text-left"
+              aria-labelledby="add-goal-modal-title"
+            >
+              <label className="block text-left text-sm font-medium text-gray-300">
+                Goal
+              </label>
+              <input
+                type="text"
+                value={newGoalTitle}
+                onChange={(e) => {
+                  setNewGoalTitle(e.target.value)
+                  if (addGoalTitleError) setAddGoalTitleError(false)
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && addGoal()}
+                placeholder=""
+                className={`w-full rounded-lg border bg-slate-800 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 ${
+                  addGoalTitleError
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                    : 'border-gray-700 focus:border-purple-500 focus:ring-purple-500'
+                }`}
+                autoFocus
+              />
+              <div className="space-y-3 rounded-lg border border-gray-800 bg-slate-900/70 p-3 text-left">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  How do you want to track this goal?
                 </p>
-                <div className="space-y-3 rounded-lg border border-gray-800 bg-slate-900/70 p-3 text-left">
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Mission title</label>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setTrackingMode(trackingMode === 'missions_weighted' ? 'missions_weighted' : 'missions_equal')}
+                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                      trackingMode === 'missions_equal' || trackingMode === 'missions_weighted'
+                        ? 'border-blue-500 bg-slate-800 text-white'
+                        : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">By missions</span>
+                    </div>
+                    <div className="mt-2 space-y-1 text-xs text-gray-400">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="missions-tracking"
+                          checked={trackingMode === 'missions_equal'}
+                          onChange={() => setTrackingMode('missions_equal')}
+                          className="h-3 w-3 accent-blue-500"
+                        />
+                        <span>All missions are equally important (each mission contributes the same %).</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="missions-tracking"
+                          checked={trackingMode === 'missions_weighted'}
+                          onChange={() => setTrackingMode('missions_weighted')}
+                          className="h-3 w-3 accent-blue-500"
+                        />
+                        <span>Weight each mission differently (you decide each mission&apos;s importance).</span>
+                      </label>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTrackingMode('time')}
+                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                      trackingMode === 'time'
+                        ? 'border-blue-500 bg-slate-800 text-white'
+                        : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">By time tracking</span>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Track how many hours you invest toward this goal.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTrackingMode('count')}
+                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                      trackingMode === 'count'
+                        ? 'border-blue-500 bg-slate-800 text-white'
+                        : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">By Milestones</span>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Track progress toward a numeric target.
+                    </p>
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={cancelAdd}
+                  className="flex-1 rounded-lg border border-gray-600 py-2.5 font-medium text-gray-300 hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={addGoal}
+                  className="flex-1 rounded-lg bg-blue-600 py-2.5 font-medium text-white hover:bg-blue-500"
+                >
+                  Add Goal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(justAddedGoal || pendingGoalCreation) && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeJustAdded()
+          }}
+        >
+          <div className="w-full max-w-md rounded-xl border border-gray-800 bg-slate-900 shadow-2xl transition-all duration-200">
+            <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+              <p id="just-added-goal-modal-title" className="text-sm font-semibold text-white">
+                {formGoal && (formGoal.trackingMode === 'missions_equal' || formGoal.trackingMode === 'missions_weighted')
+                  ? `Add missions for "${formGoal.title}"`
+                  : justAddedGoal?.trackingMode === 'time'
+                    ? `Set time target for "${justAddedGoal.title}"`
+                    : justAddedGoal
+                      ? `Set target for "${justAddedGoal.title}"`
+                      : ''}
+              </p>
+              <button
+                type="button"
+                onClick={closeJustAdded}
+                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div
+              id="just-added-goal-form"
+              className="max-h-[80vh] overflow-y-auto space-y-4 px-4 py-3 text-left"
+              aria-labelledby="just-added-goal-modal-title"
+            >
+            {(formGoal && (formGoal.trackingMode === 'missions_equal' || formGoal.trackingMode === 'missions_weighted')) ? (
+              <>
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500">Define your mission</p>
                   <input
                     type="text"
                     value={newMissionTitle}
                     onChange={(e) => setNewMissionTitle(e.target.value)}
-                    placeholder="What do you want to do?"
-                    className="w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder=""
+                    autoFocus
+                    className={`w-full rounded-lg border bg-slate-800 px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 transition-colors ${
+                      newMissionTitle.trim()
+                        ? 'border-emerald-500/60 focus:border-emerald-500/60 focus:ring-emerald-500/25'
+                        : 'border-gray-700 focus:border-cyan-500/50 focus:ring-cyan-500/30'
+                    }`}
                   />
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Repeated</label>
-                  <select
-                    value={newMissionRecurrence}
-                    onChange={(e) => setNewMissionRecurrence(e.target.value as Recurrence)}
-                    className="w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500">Make it repeated</p>
+                  <div
+                    className={`flex flex-wrap items-center gap-3 rounded-lg border bg-slate-800 px-3 py-2 ${
+                      newMissionRecurrence !== 'none' ? 'border-emerald-500/60' : 'border-gray-700'
+                    }`}
                   >
-                    <option value="none">One-time</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                  </select>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-lg bg-slate-800/50 px-3 py-2.5 text-sm text-gray-200 hover:bg-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={showMissionDuration}
-                      onChange={(e) => setShowMissionDuration(e.target.checked)}
-                      className="h-4 w-4 accent-cyan-500"
-                    />
-                    <span>Add duration (optional)</span>
-                  </label>
-                  {showMissionDuration && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Duration</span>
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={newMissionRecurrence !== 'none'}
+                        onChange={(e) => setNewMissionRecurrence(e.target.checked ? 'daily' : 'none')}
+                        className="h-4 w-4 accent-cyan-500"
+                        aria-label="Make it repeated"
+                      />
+                      <span>{newMissionRecurrence !== 'none' ? 'Repeated' : 'Make it repeated'}</span>
+                    </label>
+                    {newMissionRecurrence !== 'none' && (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <label className="flex items-center gap-2 text-sm text-gray-300">
+                          <input
+                            type="radio"
+                            name="goal-mission-recurrence"
+                            checked={newMissionRecurrence === 'daily'}
+                            onChange={() => setNewMissionRecurrence('daily')}
+                            className="h-3 w-3 accent-cyan-500"
+                          />
+                          Daily
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-gray-300">
+                          <input
+                            type="radio"
+                            name="goal-mission-recurrence"
+                            checked={newMissionRecurrence === 'weekly'}
+                            onChange={() => setNewMissionRecurrence('weekly')}
+                            className="h-3 w-3 accent-cyan-500"
+                          />
+                          Weekly
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500">
+                      How much time do you astamaite the mission to take?
+                    </p>
+                    <div
+                      className={`flex flex-wrap items-center gap-3 rounded-lg border bg-slate-800 px-3 py-2 ${
+                        showMissionDuration ? 'border-emerald-500/60' : 'border-gray-700'
+                      }`}
+                    >
+                      <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={showMissionDuration}
+                          onChange={(e) => setShowMissionDuration(e.target.checked)}
+                          className="h-4 w-4 accent-cyan-500"
+                          aria-label="Toggle duration"
+                        />
+                        <span>{showMissionDuration ? 'Duration' : 'Add duration'}</span>
+                      </label>
+                      {showMissionDuration && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <DurationCombobox
+                            value={newMissionHours}
+                            onChange={setNewMissionHours}
+                            options={Array.from({ length: 24 }, (_, i) => i)}
+                            min={0}
+                            max={99}
+                            label="h"
+                            ariaLabel="Hours"
+                          />
+                          <span className="text-gray-400">h</span>
+                          <DurationCombobox
+                            value={newMissionMinutes}
+                            onChange={setNewMissionMinutes}
+                            options={[0, 15, 30, 45]}
+                            min={0}
+                            max={59}
+                            label="m"
+                            ariaLabel="Minutes"
+                          />
+                          <span className="text-gray-400">m</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500">
+                      How much times do you need to do it untill your done?
+                    </p>
+                    <div
+                      className={`flex flex-wrap items-center gap-3 rounded-lg border bg-slate-800 px-3 py-2 ${
+                        showMissionTargetCount ? 'border-emerald-500/60' : 'border-gray-700'
+                      }`}
+                    >
+                      <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={showMissionTargetCount}
+                          onChange={(e) => setShowMissionTargetCount(e.target.checked)}
+                          className="h-4 w-4 accent-cyan-500"
+                          aria-label="Toggle target count"
+                        />
+                        <span>{showMissionTargetCount ? 'Target counter' : 'Add target counter'}</span>
+                      </label>
+                      {showMissionTargetCount && (
+                        <input
+                          type="number"
+                          min={1}
+                          value={newMissionTargetCount}
+                          onChange={(e) => setNewMissionTargetCount(Math.max(1, Number(e.target.value) || 1))}
+                          onFocus={(e) => (e.target as HTMLInputElement).select()}
+                          className="w-20 rounded-lg border bg-slate-800 px-2 py-1 text-center text-sm text-white focus:outline-none focus:ring-2 transition-colors border-gray-700 focus:border-cyan-500/50 focus:ring-cyan-500/30"
+                          aria-label="Target count"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {isWeighted && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">Weight (% of goal) — total should be 100</p>
                       <input
                         type="number"
                         min={0}
-                        max={99}
-                        value={newMissionHours}
-                        onChange={(e) => setNewMissionHours(Math.max(0, Number(e.target.value) || 0))}
-                        className="w-16 rounded-lg border border-gray-700 bg-slate-900 px-2 py-1.5 text-center text-white"
+                        max={100}
+                        value={newMissionWeightPercent}
+                        onChange={(e) => setNewMissionWeightPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                        className="w-20 rounded-lg border border-gray-700 bg-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:border-cyan-500/50 focus:ring-cyan-500/30"
+                        placeholder="0–100"
+                        aria-label="Weight percent"
                       />
-                      <span className="text-gray-400">h</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={59}
-                        value={newMissionMinutes}
-                        onChange={(e) => setNewMissionMinutes(Math.max(0, Math.min(59, Number(e.target.value) || 0)))}
-                        className="w-16 rounded-lg border border-gray-700 bg-slate-900 px-2 py-1.5 text-center text-white"
-                      />
-                      <span className="text-gray-400">m</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowMissionDuration(false)}
-                        className="text-xs font-medium text-gray-500 hover:text-gray-400 rounded px-1.5"
-                        aria-label="Cancel duration"
-                      >
-                        Cancel
-                      </button>
                     </div>
                   )}
-                  <label className="flex cursor-pointer items-center gap-3 rounded-lg bg-slate-800/50 px-3 py-2.5 text-sm text-gray-200 hover:bg-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={showMissionTargetCount}
-                      onChange={(e) => setShowMissionTargetCount(e.target.checked)}
-                      className="h-4 w-4 accent-cyan-500"
-                    />
-                    <span>Set target count (optional)</span>
-                  </label>
-                  {showMissionTargetCount && (
-                    <label className="flex items-center gap-2 text-sm text-gray-400">
-                      <span>Target count</span>
-                      <input
-                        type="number"
-                        min={1}
-                        value={newMissionTargetCount}
-                        onChange={(e) => setNewMissionTargetCount(Math.max(1, Number(e.target.value) || 1))}
-                        className="w-16 rounded-lg border border-gray-700 bg-slate-900 px-2 py-1 text-center text-white"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowMissionTargetCount(false)}
-                        className="text-xs font-medium text-gray-500 hover:text-gray-400 rounded px-1.5"
-                        aria-label="Cancel target count"
-                      >
-                        Cancel
-                      </button>
-                    </label>
-                  )}
-                  {isWeighted && (
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">
-                      Weight (% of goal) — total should be 100
-                    </label>
-                  )}
-                  {isWeighted && (
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={newMissionWeightPercent}
-                      onChange={(e) => setNewMissionWeightPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                      className="w-20 rounded-lg border border-gray-700 bg-slate-900 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="0–100"
-                    />
-                  )}
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => addMissionForGoal(true)}
-                    disabled={!newMissionTitle.trim()}
-                    className="flex-1 rounded-lg border border-blue-500 bg-slate-800 py-2.5 font-medium text-white hover:bg-blue-500/80 disabled:opacity-50"
-                  >
-                    {editingMissionId ? 'Update mission' : 'Add more mission'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={doneMissionsForGoal}
-                    className="flex-1 rounded-lg bg-blue-600 py-2.5 font-medium text-white hover:bg-blue-500"
-                  >
-                    Done
-                  </button>
                 </div>
 
                 {sessionMissions.length > 0 && (
@@ -946,8 +1347,33 @@ export default function Goals() {
                     )}
                   </div>
                 )}
+
+                <div className="flex items-center justify-end gap-3 border-t border-gray-800 px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={closeJustAdded}
+                    className="rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-400 transition-all hover:bg-slate-800 hover:text-white active:scale-[0.98]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addMissionForGoal(true)}
+                    disabled={!newMissionTitle.trim()}
+                    className="rounded-lg border border-cyan-500/60 px-4 py-2.5 text-sm font-medium text-cyan-300 transition-all hover:bg-cyan-500/20 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {editingMissionId ? 'Update mission' : 'Add more mission'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => doneMissionsForGoal()}
+                    className="rounded-lg bg-cyan-600 px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-cyan-500 active:scale-[0.98]"
+                  >
+                    Done
+                  </button>
+                </div>
               </>
-            ) : justAddedGoal.trackingMode === 'time' ? (
+            ) : justAddedGoal && justAddedGoal.trackingMode === 'time' ? (
               <>
                 <p className="text-left text-sm font-medium text-gray-300">How much time for what?</p>
                 <div className="space-y-3 rounded-lg border border-gray-800 bg-slate-900/70 p-3 text-left">
@@ -974,7 +1400,7 @@ export default function Goals() {
                     type="text"
                     value={timeLabel}
                     onChange={(e) => setTimeLabel(e.target.value)}
-                    placeholder="e.g. practice"
+                    placeholder=""
                     className="w-full rounded-lg border border-gray-700 bg-slate-900 px-4 py-3 text-white placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -1020,7 +1446,7 @@ export default function Goals() {
                       setMilestoneLabel(e.target.value)
                       if (countMilestoneError) setCountMilestoneError(false)
                     }}
-                    placeholder="e.g. chapters to read"
+                    placeholder=""
                     className={`w-full rounded-lg border bg-slate-900 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 ${
                       countMilestoneError
                         ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
@@ -1037,122 +1463,13 @@ export default function Goals() {
                 </button>
               </>
             )}
-          </div>
-        ) : showAddForm ? (
-          <div className="w-full max-w-md space-y-4 px-4">
-            <label className="block text-left text-sm font-medium text-gray-300">
-              Goal
-            </label>
-            <input
-              type="text"
-              value={newGoalTitle}
-              onChange={(e) => {
-                setNewGoalTitle(e.target.value)
-                if (addGoalTitleError) setAddGoalTitleError(false)
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && addGoal()}
-              placeholder="What do you want to achieve?"
-              className={`w-full rounded-lg border bg-slate-900 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 ${
-                addGoalTitleError
-                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
-                  : 'border-gray-700 focus:border-purple-500 focus:ring-purple-500'
-              }`}
-              autoFocus
-            />
-            <div className="space-y-3 rounded-lg border border-gray-800 bg-slate-900/70 p-3 text-left">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                How do you want to track this goal?
-              </p>
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setTrackingMode(trackingMode === 'missions_weighted' ? 'missions_weighted' : 'missions_equal')}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    trackingMode === 'missions_equal' || trackingMode === 'missions_weighted'
-                      ? 'border-blue-500 bg-slate-800 text-white'
-                      : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">By missions</span>
-                  </div>
-                  <div className="mt-2 space-y-1 text-xs text-gray-400">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="missions-tracking"
-                        checked={trackingMode === 'missions_equal'}
-                        onChange={() => setTrackingMode('missions_equal')}
-                        className="h-3 w-3 accent-blue-500"
-                      />
-                      <span>All missions are equally important (each mission contributes the same %).</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="missions-tracking"
-                        checked={trackingMode === 'missions_weighted'}
-                        onChange={() => setTrackingMode('missions_weighted')}
-                        className="h-3 w-3 accent-blue-500"
-                      />
-                      <span>Weight each mission differently (you decide each mission&apos;s importance).</span>
-                    </label>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setTrackingMode('time')}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    trackingMode === 'time'
-                      ? 'border-blue-500 bg-slate-800 text-white'
-                      : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">By time tracking</span>
-                  </div>
-                  <p className="mt-1 text-xs text-gray-400">
-                    Track how many hours you invest toward this goal.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setTrackingMode('count')}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    trackingMode === 'count'
-                      ? 'border-blue-500 bg-slate-800 text-white'
-                      : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">By Milestones</span>
-                  </div>
-                  <p className="mt-1 text-xs text-gray-400">
-                    Track progress toward a numeric target.
-                  </p>
-                </button>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={cancelAdd}
-                className="flex-1 rounded-lg border border-gray-600 py-2.5 font-medium text-gray-300 hover:bg-slate-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={addGoal}
-                className="flex-1 rounded-lg bg-blue-600 py-2.5 font-medium text-white hover:bg-blue-500"
-              >
-                Add Goal
-              </button>
             </div>
           </div>
-        ) : goals.length > 0 ? (
+        </div>
+      )}
+
+      <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800 bg-slate-900/40 py-20 text-center text-gray-300">
+        {goals.length > 0 ? (
           <>
             {chargeSuccessMessage && (
               <div className="mb-4 rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
@@ -1201,7 +1518,7 @@ export default function Goals() {
                         {Math.round(Math.min(100, Math.max(0, progress)))}%
                       </span>
                     </div>
-                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-700">
+                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-700 dashboard-category-progress-track">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-[width] duration-300"
                         style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
@@ -1380,19 +1697,32 @@ export default function Goals() {
                   </div>
                 </div>
                 </div>
-                
-                {/* Delete Button */}
-                <button
-                  type="button"
-                  onClick={() => deleteGoal(goal.id)}
-                  className={`absolute right-2 top-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100 ${btn.iconDanger}`}
-                  aria-label="Delete goal"
-                >
-                  <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
-                    <path d="M10 11v6M14 11v6" />
-                  </svg>
-                </button>
+
+                {/* Edit & Delete Buttons (appear on hover) */}
+                <div className="absolute right-2 top-2 z-20 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => startEditGoal(goal)}
+                    className={btn.iconEdit}
+                    aria-label="Edit goal"
+                  >
+                    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteGoal(goal.id)}
+                    className={btn.iconDanger}
+                    aria-label="Delete goal"
+                  >
+                    <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
+                      <path d="M10 11v6M14 11v6" />
+                    </svg>
+                  </button>
+                </div>
               </li>
             );
             })}
@@ -1416,6 +1746,195 @@ export default function Goals() {
           </>
         )}
       </div>
+
+      {/* Edit goal modal */}
+      {showEditGoalModal && editingGoal && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-xl border border-gray-800 bg-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+              <h2 className="text-sm font-semibold text-white">Edit goal</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditGoalModal(false)
+                  setEditingGoal(null)
+                }}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-4 px-4 py-3 text-left">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Goal
+                </label>
+                <input
+                  type="text"
+                  value={newGoalTitle}
+                  onChange={(e) => {
+                    setNewGoalTitle(e.target.value)
+                    if (addGoalTitleError) setAddGoalTitleError(false)
+                  }}
+                  className={`w-full rounded-lg border bg-slate-900 px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 ${
+                    addGoalTitleError
+                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                      : 'border-gray-700 focus:border-purple-500 focus:ring-purple-500'
+                  }`}
+                  placeholder=""
+                />
+              </div>
+
+              {/* Tracking mode selection (simplified) */}
+              <div className="space-y-2 rounded-lg border border-gray-800 bg-slate-900/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Tracking mode
+                </p>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTrackingMode(
+                        trackingMode === 'missions_weighted' ? 'missions_weighted' : 'missions_equal',
+                      )
+                    }
+                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                      trackingMode === 'missions_equal' || trackingMode === 'missions_weighted'
+                        ? 'border-blue-500 bg-slate-800 text-white'
+                        : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
+                    }`}
+                  >
+                    <span className="font-medium">By missions</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTrackingMode('time')}
+                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                      trackingMode === 'time'
+                        ? 'border-blue-500 bg-slate-800 text-white'
+                        : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
+                    }`}
+                  >
+                    <span className="font-medium">By time</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTrackingMode('count')}
+                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                      trackingMode === 'count'
+                        ? 'border-blue-500 bg-slate-800 text-white'
+                        : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
+                    }`}
+                  >
+                    <span className="font-medium">By count</span>
+                  </button>
+                </div>
+              </div>
+
+              {trackingMode === 'time' && (
+                <div className="space-y-2 rounded-lg border border-gray-800 bg-slate-900/70 p-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Target hours
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={targetHours}
+                    onChange={(e) => setTargetHours(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-24 rounded-lg border border-gray-700 bg-slate-900 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    What is this time for?
+                  </label>
+                  <input
+                    type="text"
+                    value={timeLabel}
+                    onChange={(e) => setTimeLabel(e.target.value)}
+                    className="w-full rounded-lg border border-gray-700 bg-slate-900 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="e.g. Deep work, practice..."
+                  />
+                </div>
+              )}
+
+              {trackingMode === 'count' && (
+                <div className="space-y-2 rounded-lg border border-gray-800 bg-slate-900/70 p-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Target count
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={goalTargetCount}
+                    onChange={(e) => setGoalTargetCount(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-24 rounded-lg border border-gray-700 bg-slate-900 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    What are you counting?
+                  </label>
+                  <input
+                    type="text"
+                    value={milestoneLabel}
+                    onChange={(e) => setMilestoneLabel(e.target.value)}
+                    className="w-full rounded-lg border border-gray-700 bg-slate-900 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="e.g. chapters read"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2 rounded-lg border border-gray-800 bg-slate-900/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Missions ({missions.filter((m) => m.goalId === editingGoal.id).length})
+                </p>
+                <ul className="space-y-1.5 max-h-40 overflow-y-auto text-sm">
+                  {missions
+                    .filter((m) => m.goalId === editingGoal.id)
+                    .sort((a, b) => (a.orderInCategory ?? 0) - (b.orderInCategory ?? 0))
+                    .map((m) => (
+                      <li
+                        key={m.id}
+                        className="flex items-start gap-2 rounded-lg bg-slate-800/60 px-2 py-1.5 text-xs text-gray-200"
+                      >
+                        <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-cyan-500" aria-hidden />
+                        <span className="flex-1 truncate" title={m.title}>
+                          {m.title}
+                        </span>
+                      </li>
+                    ))}
+                  {missions.filter((m) => m.goalId === editingGoal.id).length === 0 && (
+                    <li className="text-xs text-gray-500">
+                      No missions yet. Add missions from My Missions.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-800 px-4 py-3">
+              <button
+                type="button"
+                className="rounded-lg px-3 py-1.5 text-sm text-gray-400 hover:bg-slate-800"
+                onClick={() => {
+                  setShowEditGoalModal(false)
+                  setEditingGoal(null)
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500"
+                onClick={saveEditedGoal}
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Log Time modal — iOS-style wheel picker */}
       {logTimeModalGoalId && (

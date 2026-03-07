@@ -6,6 +6,7 @@ import { card, input, btn, alert } from '../styles/designSystem'
 
 export default function SignUp() {
   const { signUp } = useAuth()
+  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -18,7 +19,7 @@ export default function SignUp() {
     setError(null)
     setMessage(null)
     setLoading(true)
-    const result = await signUp(email.trim(), password)
+    const result = await signUp(email.trim(), password, username.trim() || undefined)
     setLoading(false)
     if (result.error) {
       const msg = result.error.message ?? ''
@@ -73,6 +74,22 @@ export default function SignUp() {
               required
               className={input.base}
               placeholder="you@example.com"
+            />
+          </div>
+          <div>
+            <label htmlFor="username" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-400">
+              Username
+            </label>
+            <input
+              id="username"
+              type="text"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              minLength={2}
+              className={input.base}
+              placeholder="Your name"
             />
           </div>
           <div>

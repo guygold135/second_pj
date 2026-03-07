@@ -8,8 +8,8 @@ export default function PublicLayout() {
   const location = useLocation()
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white">
-      <header className="sticky top-0 z-50 border-b border-gray-800/80 bg-[#0f172a]/95 backdrop-blur-md">
+    <div className="min-h-screen theme-bg theme-text">
+      <header className="sticky top-0 z-50 border-b theme-border backdrop-blur-md theme-bg-header">
         <div className="mx-auto flex w-full max-w-[1600px] items-center gap-6 px-4 py-3 sm:px-6 lg:px-8">
           <Link
             to="/"

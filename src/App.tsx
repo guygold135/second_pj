@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ThemeProvider } from './contexts/ThemeContext'
 import { loadingState } from './styles/designSystem'
 import { GoalsProvider } from './contexts/GoalsContext'
 import { MissionsProvider } from './contexts/MissionsContext'
@@ -24,7 +25,7 @@ function ProtectedLayout() {
   const { user, isLoading } = useAuth()
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#0f172a]">
+      <div className="flex min-h-screen items-center justify-center gap-3 theme-bg theme-text">
         <div className={loadingState.spinner} aria-hidden />
         <span className={loadingState.inline}>Loading…</span>
       </div>
@@ -52,7 +53,7 @@ function AppRoutes() {
   const { user, isLoading } = useAuth()
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#0f172a]">
+      <div className="flex min-h-screen items-center justify-center gap-3 theme-bg theme-text">
         <div className={loadingState.spinner} aria-hidden />
         <span className={loadingState.inline}>Loading…</span>
       </div>
@@ -103,7 +104,7 @@ class AppErrorBoundary extends Component<
   render() {
     if (this.state.hasError && this.state.error) {
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0f172a] p-6 text-center">
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 theme-bg theme-text p-6 text-center">
           <p className="text-lg font-medium text-red-300">Something went wrong</p>
           <p className="max-w-md break-words text-sm text-gray-400">
             {this.state.error.message}
@@ -126,23 +127,25 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <AuthProvider>
-        <div className="relative min-h-screen">
-          <div className="fixed inset-0 z-0 h-full w-full min-h-screen">
-            <EtherealShadow
-              className="h-full w-full min-h-full min-w-full"
-              color="rgba(15, 23, 42, 0.92)"
-              animation={{ scale: 100, speed: 90 }}
-              noise={{ opacity: 0.4, scale: 1.2 }}
-              sizing="fill"
-              showTitle={false}
-            />
+        <ThemeProvider>
+          <div className="relative min-h-screen theme-bg">
+            <div className="fixed inset-0 z-0 h-full w-full min-h-screen">
+              <EtherealShadow
+                className="h-full w-full min-h-full min-w-full"
+                color="rgba(15, 23, 42, 0.92)"
+                animation={{ scale: 100, speed: 90 }}
+                noise={{ opacity: 0.4, scale: 1.2 }}
+                sizing="fill"
+                showTitle={false}
+              />
+            </div>
+            <div className="relative z-10">
+              <BrowserRouter>
+                <AppRoutes />
+              </BrowserRouter>
+            </div>
           </div>
-          <div className="relative z-10">
-            <BrowserRouter>
-              <AppRoutes />
-            </BrowserRouter>
-          </div>
-        </div>
+        </ThemeProvider>
       </AuthProvider>
     </AppErrorBoundary>
   )

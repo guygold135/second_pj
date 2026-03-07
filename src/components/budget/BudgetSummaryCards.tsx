@@ -57,7 +57,7 @@ export function BudgetSummaryCards({
           <p className={`whitespace-nowrap text-xl font-bold ${execTextColor}`}>{formatPercent(exec)} spent</p>
         </div>
       </div>
-      <div className="mt-4 h-4 overflow-hidden rounded-full bg-slate-700">
+      <div className="mt-4 h-4 overflow-hidden rounded-full bg-slate-700 budget-summary-progress-track">
         {hasSegments ? (
           <div className="flex h-full w-full" style={{ width: `${Math.min(100, exec)}%` }}>
             {categorySegments.map((seg, i) => {
@@ -90,5 +90,5 @@ export function BudgetSummaryCards({
 }
 
 function formatPercent(n: number): string {
-  return `${Math.round(Math.min(999, Math.max(0, n)))}%`
+  return `${Math.round(Math.max(0, n))}%`
 }

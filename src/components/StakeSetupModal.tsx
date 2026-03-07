@@ -367,7 +367,7 @@ export function StakeSetupModal({
         onClick={(e) => e.stopPropagation()}
       >
         <StakeModalRootErrorBoundary onClose={onClose}>
-          <div className={modal.header}>
+          <div className={`${modal.header} px-6`}>
             <h2 id="stake-modal-title" className={modal.title}>
               Add financial stake
             </h2>
@@ -382,7 +382,7 @@ export function StakeSetupModal({
           </div>
 
           {step === 1 && (
-          <div className="space-y-4">
+          <div className="space-y-4 px-6 py-5">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-400">Amount</label>
               <input
@@ -456,7 +456,7 @@ export function StakeSetupModal({
         )}
 
         {step === 2 && (
-          <>
+          <div className="px-6 py-5 space-y-4">
             {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
             {loading && <p className="text-sm text-gray-400">Preparing card form…</p>}
             {!loading && !stripePromise && (
@@ -500,7 +500,7 @@ export function StakeSetupModal({
             >
               ← Back
             </button>
-          </>
+          </div>
         )}
         </StakeModalRootErrorBoundary>
       </div>

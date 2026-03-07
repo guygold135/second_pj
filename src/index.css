@@ -11,12 +11,74 @@
   color: #f8fafc;
   --background: #0f172a;
   --foreground: #f8fafc;
+  --surface: #1e293b;
+  --surface-hover: #334155;
+  --border: #334155;
+  --muted: #94a3b8;
   --primary: #06b6d4;
   --primary-hover: #22d3ee;
   --radius: 0.5rem;
   --radius-lg: 0.75rem;
   --transition: 200ms ease;
   --transition-slow: 300ms ease;
+}
+
+/* Light theme — applied when data-theme="light" on <html> */
+[data-theme="light"] {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --surface: #f1f5f9;
+  --surface-hover: #e2e8f0;
+  --border: rgb(6 182 212 / 0.5);
+  --muted: #64748b;
+}
+
+/* Light theme: blocks use surface + light blue borders, text readable */
+[data-theme="light"] .bg-slate-800,
+[data-theme="light"] .bg-slate-900,
+[data-theme="light"] [class*="bg-slate-800"],
+[data-theme="light"] [class*="bg-slate-900"] {
+  background-color: var(--surface) !important;
+}
+[data-theme="light"] .border-gray-700,
+[data-theme="light"] .border-gray-800,
+[data-theme="light"] [class*="border-gray-700"],
+[data-theme="light"] [class*="border-gray-800"] {
+  border-color: var(--border) !important;
+}
+[data-theme="light"] .text-white {
+  color: var(--foreground) !important;
+}
+[data-theme="light"] .text-gray-200,
+[data-theme="light"] .text-gray-300 {
+  color: var(--foreground) !important;
+}
+[data-theme="light"] .text-gray-400 {
+  color: var(--muted) !important;
+}
+/* Light theme: gray blocks (buttons, badges) use light surface */
+[data-theme="light"] .bg-gray-800,
+[data-theme="light"] [class*="bg-gray-800"] {
+  background-color: var(--surface) !important;
+}
+[data-theme="light"] .border-gray-600,
+[data-theme="light"] [class*="border-gray-600"] {
+  border-color: var(--border) !important;
+}
+[data-theme="light"] .bg-black\/80,
+[data-theme="light"] .bg-black\/50 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+[data-theme="light"] .placeholder\:text-gray-500::placeholder {
+  color: var(--muted) !important;
+}
+[data-theme="light"] .divide-gray-800 > * {
+  border-color: var(--border) !important;
+}
+[data-theme="light"] .hover\:bg-slate-800\/50:hover,
+[data-theme="light"] .hover\:bg-slate-800\/60:hover,
+[data-theme="light"] .hover\:bg-slate-700:hover {
+  background-color: var(--surface-hover) !important;
 }
 
 .dark {
@@ -26,6 +88,119 @@
 
 .text-foreground {
   color: var(--foreground);
+}
+
+/* Theme-aware utilities — use with data-theme on html */
+.theme-bg { background-color: var(--background); }
+.theme-bg-header { background-color: color-mix(in srgb, var(--background) 97%, transparent); }
+.theme-surface { background-color: var(--surface); }
+.theme-border { border-color: var(--border); }
+.theme-text { color: var(--foreground); }
+.theme-text:hover { color: var(--foreground) !important; }
+.theme-text-muted { color: var(--muted); }
+
+/* Theme toggle: in light mode keep icon visible on hover (button hover uses light bg) */
+[data-theme="light"] .theme-toggle-btn:hover {
+  color: var(--foreground) !important;
+}
+[data-theme="light"] .theme-toggle-btn:hover svg {
+  color: var(--foreground) !important;
+}
+
+/* White text with thin black outline — readable on any background (e.g. quote banner) */
+.quote-banner-text {
+  color: #fff;
+  text-shadow:
+    0 0 1px #000,
+    0 1px 1px #000,
+    0 -1px 1px #000,
+    1px 0 1px #000,
+    -1px 0 1px #000,
+    1px 1px 1px #000,
+    1px -1px 1px #000,
+    -1px 1px 1px #000,
+    -1px -1px 1px #000;
+}
+
+/* Elegant quote line: refined typography */
+.quote-banner-quote {
+  font-size: 0.9375rem; /* 15px */
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+/* Mission progress checkbox: V dark in dark mode (matches checkbox bg); white in light mode */
+button .mission-progress-check,
+.mission-progress-check { color: #0f172a !important; stroke: #0f172a !important; }
+[data-theme="light"] button .mission-progress-check,
+[data-theme="light"] .mission-progress-check { color: #fff !important; stroke: #fff !important; }
+
+/* MyMissions category header divider: dark in dark mode; noticeable dark line in light mode */
+.mission-category-divider {
+  height: 1px;
+  flex: 1 1 0%;
+  background-color: rgb(31 41 55); /* gray-800, same as dark mode */
+}
+[data-theme="light"] .mission-category-divider {
+  background-color: #475569 !important; /* slate-600, visible on light bg */
+}
+
+/* Dashboard category progress bar: in light mode always outline + white inside (empty or partially filled) */
+[data-theme="light"] .dashboard-category-progress-track {
+  background-color: #fff !important;
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+/* Dashboard main budget progress bar: in light mode outline + white inside; outline color matches fill */
+[data-theme="light"] .dashboard-budget-progress-track {
+  background-color: #fff !important;
+  box-sizing: border-box;
+}
+[data-theme="light"] .dashboard-budget-progress-track--ok {
+  border: 1px solid rgb(16 185 129); /* emerald-500 */
+}
+[data-theme="light"] .dashboard-budget-progress-track--warning {
+  border: 1px solid rgb(251 191 36); /* amber-400 */
+}
+[data-theme="light"] .dashboard-budget-progress-track--over {
+  border: 1px solid rgb(239 68 68); /* red-500 */
+}
+
+/* CategoryCard progress bar: in light mode outline + white inside */
+[data-theme="light"] .category-card-progress-track {
+  background-color: #fff !important;
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+/* BudgetSummaryCards progress bar: in light mode outline + white inside, orange outline to match amount color */
+[data-theme="light"] .budget-summary-progress-track {
+  background-color: #fff !important;
+  border: 1px solid rgb(249 115 22); /* orange-500 */
+  box-sizing: border-box;
+}
+
+/* ProgressRing (Dashboard goals): track = empty with outline; completed arc = green */
+.progress-ring-track {
+  fill: none;
+  stroke: #475569; /* slate-600, visible outline in dark mode */
+}
+[data-theme="light"] .progress-ring-track {
+  fill: #fff !important;
+  stroke: var(--border) !important;
+}
+
+/* Number input without spinner arrows (used in custom repeat modal) */
+.no-spinner-input::-webkit-outer-spin-button,
+.no-spinner-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner-input[type='number'] {
+  -moz-appearance: textfield;
 }
 
 /* Glow button — used by GlowButton component */
@@ -76,16 +251,16 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: #0f172a;
-  color: #f8fafc;
+  background-color: var(--background);
+  color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   min-height: 100vh;
-  background-color: #0f172a;
-  color: #f8fafc;
+  background-color: var(--background);
+  color: var(--foreground);
 }
 
 /* Focus visible for accessibility */
@@ -113,4 +288,75 @@ body {
 }
 .stake-pulse {
   animation: stakePulse 2.5s ease-in-out infinite;
+}
+
+/* Mission card checkbox — unchecked matches card background (slate-800) */
+.mission-card-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid rgb(51 65 85);
+  border-radius: 0.25rem;
+  background-color: rgb(30 41 59);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.mission-card-checkbox:hover {
+  border-color: rgb(71 85 105);
+}
+.mission-card-checkbox:checked {
+  background-color: rgb(51 65 85);
+  border-color: rgb(71 85 105);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2310b981' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 6l3 3 5-6'/%3E%3C/svg%3E");
+  background-size: 75%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.mission-card-checkbox:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Scrollbar — design system: thin, subtle (thumb only, transparent track). Applied globally. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.8) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.9);
+  border-radius: 9999px;
+}
+/* Optional class for explicit use (same as global; use if overriding elsewhere) */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.8) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.9);
+  border-radius: 9999px;
+}
+
+/* Hide scrollbar while keeping scroll behavior */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

@@ -13,7 +13,7 @@ type AuthContextValue = {
   session: Session | null
   isLoading: boolean
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
-  signUp: (email: string, password: string) => Promise<SignUpResult>
+  signUp: (email: string, password: string, username?: string) => Promise<SignUpResult>
   signOut: () => Promise<void>
   resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>
   updatePassword: (password: string) => Promise<{ error: Error | null }>
@@ -54,9 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error ?? null }
   }, [])
 
-  const signUp = useCallback(async (email: string, password: string): Promise<SignUpResult> => {
+  const signUp = useCallback(async (email: string, password: string, username?: string): Promise<SignUpResult> => {
     if (!supabase) return { error: new Error('Supabase not configured') }
-    const { data, error } = await supabase.auth.signUp({ email, password })
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: username ? { data: { name: username } } : undefined,
+    })
     if (error) return { error }
     // Supabase returns success for existing email but with no new identity (identities array empty)
     const existingUser = !!(data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0)

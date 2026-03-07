@@ -11,6 +11,12 @@
     <title>Mission Flow - Productivity & Financial Command Center</title>
   </head>
   <body>
+    <script>
+      (function () {
+        var t = localStorage.getItem('mission-flow-theme');
+        document.documentElement.setAttribute('data-theme', (t === 'light' || t === 'dark') ? t : 'dark');
+      })();
+    </script>
     <!-- כאן React "מתלבש" ומצייר את כל האפליקציה -->
     <div id="root"></div>
     <!-- זה הקובץ שמתחיל את האפליקציה (ראה `src/main.tsx`) -->

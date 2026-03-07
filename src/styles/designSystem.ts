@@ -19,7 +19,10 @@ export const btn = {
   ghost:
     'rounded-lg p-1.5 text-gray-400 transition-colors duration-200 hover:bg-slate-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-gray-500/50',
   iconDanger:
-    'rounded-lg p-1.5 text-gray-400 transition-colors duration-200 hover:bg-red-500/10 hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-red-400/50',
+    'rounded p-1.5 text-gray-400 transition-colors duration-200 hover:bg-red-500/10 hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-red-400/50',
+  /** Use for all edit (pencil) icon buttons — squared hit area, cyan hover. Example: Edit mission, Edit goal, Edit category, Edit transaction. */
+  iconEdit:
+    'rounded p-1.5 text-gray-400 transition-colors duration-200 hover:bg-cyan-500/10 hover:text-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/50',
   outline:
     'rounded-lg border border-cyan-500/60 bg-cyan-500/10 px-4 py-2.5 text-sm font-medium text-cyan-300 transition-all duration-200 hover:bg-cyan-500/20 hover:border-cyan-500/80 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:ring-offset-2 focus:ring-offset-slate-900',
 }
@@ -82,9 +85,12 @@ export const loadingState = {
     'h-5 w-5 animate-spin rounded-full border-2 border-gray-600 border-t-cyan-500',
 }
 
-// ─── Drag handle ───────────────────────────────────────────────────────────
+// ─── Drag handle (use with @dnd-kit useSortable listeners/attributes) ───────
 export const dragHandle =
   'cursor-grab touch-none shrink-0 rounded p-1 text-gray-500 transition-colors duration-200 hover:text-gray-300 active:cursor-grabbing'
+
+/** CSS transition for sortable item layout (transform). Use as fallback when dnd-kit does not provide one. */
+export const sortableTransition = 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)'
 
 // ─── Card ──────────────────────────────────────────────────────────────────
 export const card =
@@ -99,4 +105,13 @@ export const sectionTitle =
   'text-sm font-semibold uppercase tracking-wider text-gray-400'
 
 // ─── Focus ring (utility) ───────────────────────────────────────────────────
-export const focusRing = 'focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:ring-offset-2 focus:ring-offset-slate-900'
+export const focusRing =
+  'focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:ring-offset-2 focus:ring-offset-slate-900'
+
+// ─── Scrollbar (app-wide) ───────────────────────────────────────────────────
+// Thin, subtle scrollbar — thumb only, transparent track. Applied globally in index.css
+// so all current and future scrollable elements use this style. Class for optional override.
+export const scrollbar = {
+  class: 'thin-scrollbar',
+}
+

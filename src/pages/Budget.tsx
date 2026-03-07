@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Budget, BudgetCategory, BudgetTransaction } from '../types'
-import { getRandomQuoteForPage } from '../utils/quotes'
 import { buildDefaultCategories } from '../components/budget/defaultCategories'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useBudget } from '../contexts/BudgetContext'
+import { useTheme } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import {
   getMonthStartEnd,
@@ -25,8 +25,8 @@ import { getCategoryColorHex } from '../components/budget/categoryColors'
 import { CategoryCard } from '../components/budget/CategoryCard'
 import { TransactionForm } from '../components/budget/TransactionForm'
 import { TransactionList } from '../components/budget/TransactionList'
-import { CategoryManager } from '../components/budget/CategoryManager'
-import { btn, card, emptyState, loadingState, pageContainer } from '../styles/designSystem'
+import { ColorSelect, PRESET_COLOR_VALUES } from '../components/budget/CategoryManager'
+import { btn, card, emptyState, loadingState, modal, pageContainer } from '../styles/designSystem'
 import OpportunityCost, {
   getBlendedRateAndHorizon,
   compoundGrowth,
@@ -51,16 +51,46 @@ function createBudgetForRange(start: string, end: string, createId: () => string
 export default function Budget() {
   const { user } = useAuth()
   const { formatMoney } = useCurrency()
+  const { theme } = useTheme()
   const { budgets, setBudgets, currentId, setCurrentId, periodStart, setPeriodStart, periodEnd, setPeriodEnd } = useBudget()
-  const [motivationQuote] = useState(() => getRandomQuoteForPage('finance'))
   const [periodType, setPeriodType] = useState<PeriodType>('month')
   const [showTransactionForm, setShowTransactionForm] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<BudgetTransaction | null>(null)
-  const [showCategoryManager, setShowCategoryManager] = useState(false)
+  const [categoryIdAddingExpense, setCategoryIdAddingExpense] = useState<string | null>(null)
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [categoryIdToDelete, setCategoryIdToDelete] = useState<string | null>(null)
+  const [showAddCategoryInline, setShowAddCategoryInline] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatNameError, setNewCatNameError] = useState(false)
+  const [newCatBudget, setNewCatBudget] = useState('0')
+  const [newCatColor, setNewCatColor] = useState('text-sky-500')
+  const addCategoryFormRef = useRef<HTMLDivElement>(null)
+  const addCategoryNameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!showAddCategoryInline) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (addCategoryFormRef.current && !addCategoryFormRef.current.contains(e.target as Node)) {
+        setShowAddCategoryInline(false)
+        setNewCatName('')
+        setNewCatNameError(false)
+        setNewCatBudget('0')
+        setNewCatColor('text-sky-500')
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showAddCategoryInline])
+
+  useEffect(() => {
+    if (showAddCategoryInline) {
+      const t = setTimeout(() => addCategoryNameInputRef.current?.focus(), 0)
+      return () => clearTimeout(t)
+    }
+  }, [showAddCategoryInline])
+
   const [showInvestmentProfileModal, setShowInvestmentProfileModal] = useState(false)
   const [opportunityCostSaved, setOpportunityCostSaved] = useState<OpportunityCostSaved | null>(null)
-  const transactionFormRef = useRef<HTMLElement | null>(null)
   const prevModalOpenRef = useRef(false)
 
   const currentBudget = budgets.find((b) => b.id === currentId)
@@ -115,15 +145,6 @@ export default function Budget() {
     }
     prevModalOpenRef.current = showInvestmentProfileModal
   }, [showInvestmentProfileModal, loadOpportunityCost])
-
-  useEffect(() => {
-    if (!showTransactionForm) return
-    // When editing from the list, scroll a bit ABOVE the form so it's clearly visible.
-    const el = transactionFormRef.current
-    if (!el) return
-    const y = el.getBoundingClientRect().top + window.scrollY - 96
-    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
-  }, [showTransactionForm, editingTransaction?.id])
 
   const goPeriod = (delta: number) => {
     let next: { start: string; end: string }
@@ -204,8 +225,8 @@ export default function Budget() {
     }
   }
 
-  const addCategory = (name: string, budget: number) => {
-    const newCat: BudgetCategory = { id: uuidv4(), name, budget }
+  const addCategory = (name: string, budget: number, color?: string) => {
+    const newCat: BudgetCategory = { id: uuidv4(), name, budget, ...(color && { color }) }
     updateBudget({ categories: [...(currentBudget?.categories ?? []), newCat] })
   }
 
@@ -266,15 +287,6 @@ export default function Budget() {
 
   return (
     <div className={`${pageContainer} mx-auto max-w-4xl`}>
-      <div className="mb-8 flex items-center gap-3 rounded-xl border border-cyan-500/30 bg-slate-900/60 px-4 py-3">
-        <svg className="h-5 w-5 shrink-0 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-        </svg>
-        <span className="flex-1 bg-transparent text-white" aria-hidden="true">
-          {motivationQuote}
-        </span>
-      </div>
-
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -321,9 +333,6 @@ export default function Budget() {
             →
           </button>
         </div>
-        <p className="text-xs text-gray-500">
-          {periodStart && periodEnd ? `${periodStart} – ${periodEnd}` : ''}
-        </p>
       </div>
 
       {currentBudget && (
@@ -337,15 +346,20 @@ export default function Budget() {
               <div className="overflow-x-auto">
                 <div className="grid min-w-[520px] grid-cols-5 gap-3">
                   {timeframeBars.map((t) => {
-                    const baseOrange = Math.min(t.spentAmount, t.plannedBudget)
-                    const delta = Math.abs(t.plannedBudget - t.spentAmount)
-                    const orangePct = (baseOrange / timeframeMax) * 100
-                    const deltaPct = (delta / timeframeMax) * 100
-                    const deltaBg =
-                      t.plannedBudget >= t.spentAmount
-                        ? 'bg-emerald-500/38 ring-1 ring-inset ring-emerald-300/60'
-                        : 'bg-red-500/65'
+                    const spentPct = timeframeMax > 0 ? (t.spentAmount / timeframeMax) * 100 : 0
+                    const budgetPct = timeframeMax > 0 ? (t.plannedBudget / timeframeMax) * 100 : 0
                     const active = t.delta === 0
+                    const diffPct = Math.abs(spentPct - budgetPct)
+                    const underBudget = t.plannedBudget >= t.spentAmount
+                    const diffAmount = Math.abs(t.plannedBudget - t.spentAmount)
+                    const hasDiff = diffAmount >= 0.01
+                    const exec = t.plannedBudget > 0 ? (t.spentAmount / t.plannedBudget) * 100 : 0
+                    const overBudgetFillColor =
+                      exec >= 175 ? '#ef4444'
+                      : exec >= 125 ? '#f97316'
+                      : exec >= 110 ? '#fb923c'
+                      : exec >= 100 ? '#facc15'
+                      : '#ef4444'
 
                     return (
                       <button
@@ -355,37 +369,74 @@ export default function Budget() {
                           if (t.delta === 0) return
                           goPeriod(t.delta)
                         }}
-                        className={`group flex flex-col items-center gap-1.5 rounded-lg px-2 py-2 text-left transition hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 ${
-                          active ? 'bg-slate-800/60 ring-1 ring-cyan-500/30' : ''
+                        className={`group flex flex-col items-center gap-1.5 rounded-lg px-2 py-2 text-left transition hover:bg-slate-800/60 focus:outline-none focus:ring-0 ${
+                          active ? 'bg-slate-800/60' : ''
                         }`}
-                        title={`Spent: ${formatMoney(t.spentAmount)} | Budget: ${formatMoney(t.plannedBudget)} (${t.start}–${t.end})`}
+                        title={`Budget: ${formatMoney(t.plannedBudget)} | Spent: ${formatMoney(t.spentAmount)} (${t.start}–${t.end})`}
                         aria-label={`Select timeframe ${t.label}`}
                       >
-                        <div className="flex h-16 items-end justify-center">
-                          <div className="flex h-16 w-[25px] flex-col justify-end">
-                            {deltaPct > 0 && <div className={`${deltaBg}`} style={{ height: `${deltaPct}%` }} />}
-                            {orangePct > 0 && <div className="bg-orange-300/90" style={{ height: `${orangePct}%` }} />}
-                          </div>
+                        <div className="relative mx-auto flex-shrink-0" style={{ width: '105px', height: '120px' }}>
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 27,
+                              width: '21px',
+                              height: `${budgetPct}%`,
+                              background: 'linear-gradient(to top, #0891b2, #06b6d4)',
+                              borderRadius: '4px 4px 0 0',
+                              zIndex: 1,
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 57,
+                              width: '21px',
+                              height: `${spentPct}%`,
+                              background: 'linear-gradient(to top, #84cc16, #eab308)',
+                              borderRadius: '4px 4px 0 0',
+                              zIndex: 1,
+                            }}
+                          />
+                          {hasDiff && diffPct > 0 && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                left: 57,
+                                width: '21px',
+                                bottom: `${Math.min(budgetPct, spentPct)}%`,
+                                height: `${diffPct}%`,
+                                backgroundColor: underBudget ? 'rgba(0,128,0,0.25)' : overBudgetFillColor,
+                                zIndex: 2,
+                              }}
+                            />
+                          )}
+                          {budgetPct > 0 && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                left: 48,
+                                width: '30px',
+                                top: `${100 - budgetPct}%`,
+                                height: '2px',
+                                background: theme === 'dark'
+                                  ? 'repeating-linear-gradient(90deg, #fff 0px, #fff 4px, transparent 4px, transparent 8px)'
+                                  : 'repeating-linear-gradient(90deg, #06b6d4 0px, #06b6d4 4px, transparent 4px, transparent 8px)',
+                                zIndex: 10,
+                              }}
+                            />
+                          )}
                         </div>
                         <div className="w-full truncate text-center text-[11px] font-medium text-gray-300 group-hover:text-white">
                           {t.label}
-                        </div>
-                        <div className="w-full text-center text-[10px] leading-tight">
-                          <div className="truncate text-orange-200/90">
-                            {formatMoney(t.spentAmount)} <span className="text-orange-200/70">spent</span>
-                          </div>
-                          <div className="truncate text-gray-400">
-                            {formatMoney(t.plannedBudget)} <span className="text-gray-500">budget</span>
-                          </div>
                         </div>
                       </button>
                     )
                   })}
                 </div>
               </div>
-              <p className="mt-2 text-xs text-gray-500">
-                Spent is shown in light orange. The extra segment shows the gap to your planned budget (green if under, red if over).
-              </p>
             </section>
           )}
 
@@ -443,80 +494,224 @@ export default function Budget() {
             )
           })()}
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setEditingTransaction(null)
-                setShowCategoryManager(false)
-                setShowTransactionForm(true)
-              }}
-              className={`flex items-center gap-2 ${btn.primary}`}
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add expense
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowTransactionForm(false)
-                setShowCategoryManager((v) => !v)
-                setEditingCategoryId(null)
-              }}
-              className={btn.secondary}
-            >
-              {showCategoryManager ? 'Hide categories' : 'Manage categories'}
-            </button>
-          </div>
-
-          {showCategoryManager && (
-            <section className={`${card} p-4`} aria-label="Category management">
-              <CategoryManager
-                categories={categoriesNoIncome}
-                initialEditId={editingCategoryId}
-                onCloseSingleEdit={() => { setEditingCategoryId(null); setShowCategoryManager(false) }}
-                onAdd={addCategory}
-                onEdit={editCategory}
-                onDelete={deleteCategory}
-              />
-            </section>
-          )}
-
           {showTransactionForm && (
-            <section ref={transactionFormRef} aria-label="Add or edit transaction">
-              <TransactionForm
-                key={editingTransaction?.id ?? 'new'}
-                categories={categoriesNoIncome}
-                defaultDate={defaultTransactionDate}
-                minDate={currentBudget.startDate}
-                maxDate={currentBudget.endDate}
-                onSubmit={addTransaction}
-                onCancel={() => { setShowTransactionForm(false); setEditingTransaction(null) }}
-                initial={editingTransaction ?? undefined}
-              />
-            </section>
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+              onClick={() => { setShowTransactionForm(false); setEditingTransaction(null) }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="add-expense-modal-title"
+            >
+              <div
+                className="flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-gray-800 bg-slate-900 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex shrink-0 items-center justify-between border-b border-gray-800 px-4 py-3">
+                  <h2 id="add-expense-modal-title" className="text-lg font-semibold text-white">
+                    {editingTransaction ? 'Edit expense' : 'Add expense'}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => { setShowTransactionForm(false); setEditingTransaction(null) }}
+                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="min-h-0 overflow-y-auto p-4">
+                  <TransactionForm
+                    key={editingTransaction?.id ?? 'new'}
+                    categories={categoriesNoIncome}
+                    defaultDate={defaultTransactionDate}
+                    minDate={currentBudget.startDate}
+                    maxDate={currentBudget.endDate}
+                    onSubmit={addTransaction}
+                    onCancel={() => { setShowTransactionForm(false); setEditingTransaction(null) }}
+                    initial={editingTransaction ?? undefined}
+                  />
+                </div>
+              </div>
+            </div>
           )}
 
-          {expenseCategories.length > 0 && (
-            <section>
-              <h2 className="mb-3 text-sm font-semibold text-gray-300">Category breakdown</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {expenseCategories.map((cat) => (
-                  <CategoryCard
-                    key={cat.id}
-                    category={cat}
-                    spent={spent[cat.id] ?? 0}
-                    onEdit={(c) => { setEditingCategoryId(c.id); setShowCategoryManager(true) }}
-                  />
-                ))}
+          {categoryIdToDelete && (
+            <div
+              className={modal.backdrop}
+              onClick={() => setCategoryIdToDelete(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-category-title"
+            >
+              <div
+                className={`${modal.box} max-w-sm`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className={`${modal.header} justify-center relative`}>
+                  <h2 id="delete-category-title" className={modal.title}>
+                    Delete category?
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryIdToDelete(null)}
+                    className={`${modal.closeBtn} absolute right-0 top-1/2 -translate-y-1/2`}
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className={`${modal.footer} justify-center`}>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryIdToDelete(null)}
+                    className={btn.secondary}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteCategory(categoryIdToDelete)
+                      setCategoryIdToDelete(null)
+                    }}
+                    className={btn.danger}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
-            </section>
+            </div>
           )}
 
           <section>
-            <h2 className="mb-3 text-sm font-semibold text-gray-300">Transactions</h2>
+            <h2 className="mb-3 text-sm font-semibold text-gray-300">Category breakdown</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {expenseCategories.map((cat) => (
+                <CategoryCard
+                  key={cat.id}
+                  category={cat}
+                  spent={spent[cat.id] ?? 0}
+                  onAddExpense={() => setCategoryIdAddingExpense(cat.id)}
+                  onEdit={(c) => setEditingCategoryId(c.id)}
+                  onDelete={(id) => setCategoryIdToDelete(id)}
+                  isEditing={editingCategoryId === cat.id}
+                  isAddingExpense={categoryIdAddingExpense === cat.id}
+                  onCancelAddExpense={() => setCategoryIdAddingExpense(null)}
+                  onAddExpenseSubmit={(tx) => {
+                    addTransaction(tx)
+                    setCategoryIdAddingExpense(null)
+                  }}
+                  defaultDate={defaultTransactionDate}
+                  minDate={currentBudget.startDate}
+                  maxDate={currentBudget.endDate}
+                  onSave={(id, updates) => {
+                    editCategory(id, updates)
+                    setEditingCategoryId(null)
+                  }}
+                  onCancelEdit={() => setEditingCategoryId(null)}
+                  colorsUsedByOtherCategories={expenseCategories.filter((c) => c.id !== cat.id).map((c) => c.color ?? 'text-white')}
+                />
+              ))}
+              {showAddCategoryInline ? (
+                <div
+                  ref={addCategoryFormRef}
+                  className="rounded-xl border border-gray-800 bg-slate-900/60 p-3 shadow-lg shadow-black/20 transition hover:border-gray-700"
+                  role="article"
+                  aria-label="Add category"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      const name = newCatName.trim()
+                      if (!name) {
+                        setNewCatNameError(true)
+                        return
+                      }
+                      setNewCatNameError(false)
+                      addCategory(name, parseFloat(newCatBudget) || 0, newCatColor)
+                      setNewCatName('')
+                      setNewCatBudget('0')
+                      setNewCatColor('text-sky-500')
+                      setShowAddCategoryInline(false)
+                    }
+                  }}
+                >
+                  <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                    <input
+                      ref={addCategoryNameInputRef}
+                      type="text"
+                      value={newCatName}
+                      onChange={(e) => { setNewCatName(e.target.value); setNewCatNameError(false) }}
+                      placeholder="Category name"
+                      className={`min-w-0 flex-1 rounded border px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 ${newCatNameError ? 'border-red-500 bg-slate-900 ring-2 ring-red-500' : 'border-gray-700 bg-slate-900 focus:border-cyan-500'}`}
+                    />
+                    <ColorSelect value={newCatColor} onChange={setNewCatColor} className="shrink-0 [&_button]:min-w-0 [&_button]:px-2 [&_button]:py-1.5 [&_button]:text-xs" disabledColors={expenseCategories.map((c) => c.color ?? 'text-white')} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-gray-400">budget</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={newCatBudget}
+                      onChange={(e) => setNewCatBudget(e.target.value.replace(/[^\d.]/g, ''))}
+                      placeholder="Budget"
+                      className="w-20 rounded border border-gray-700 bg-slate-900 px-2 py-1.5 text-xs text-white focus:border-cyan-500 focus:outline-none"
+                    />
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const name = newCatName.trim()
+                          if (!name) {
+                            setNewCatNameError(true)
+                            return
+                          }
+                          setNewCatNameError(false)
+                          addCategory(name, parseFloat(newCatBudget) || 0, newCatColor)
+                          setNewCatName('')
+                          setNewCatBudget('0')
+                          setNewCatColor('text-sky-500')
+                          setShowAddCategoryInline(false)
+                        }}
+                        className="rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:ring-offset-2 focus:ring-offset-slate-900"
+                      >
+                        Create
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddCategoryInline(false)
+                          setNewCatName('')
+                          setNewCatNameError(false)
+                          setNewCatBudget('0')
+                          setNewCatColor('text-sky-500')
+                        }}
+                        className="rounded-lg border border-cyan-500/60 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-medium text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-500/80 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:ring-offset-2 focus:ring-offset-slate-900"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const used = expenseCategories.map((c) => c.color ?? 'text-white')
+                    const firstUnused = PRESET_COLOR_VALUES.find((v) => !used.includes(v)) ?? PRESET_COLOR_VALUES[0]
+                    setNewCatColor(firstUnused ?? 'text-white')
+                    setNewCatNameError(false)
+                    setShowAddCategoryInline(true)
+                  }}
+                  className="flex min-h-[94px] items-center justify-center rounded-xl border border-gray-800 bg-slate-900/60 p-4 shadow-lg shadow-black/20 transition hover:border-gray-700 hover:bg-slate-900/80 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  aria-label="Add category"
+                >
+                  <span className="text-3xl font-light text-gray-500">+</span>
+                </button>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-sm font-semibold text-gray-300">Expenses history</h2>
             {currentBudget.transactions.length === 0 && !showTransactionForm ? (
               <div className={emptyState.wrapper}>
                 <div className={emptyState.icon}>
@@ -525,13 +720,13 @@ export default function Budget() {
                   </svg>
                 </div>
                 <p className={emptyState.title}>No transactions yet.</p>
-                <p className={emptyState.subtitle}>Click &quot;Add expense&quot; to add your first transaction.</p>
+                <p className={emptyState.subtitle}>Use the + on a category card to add a transaction.</p>
               </div>
             ) : (
               <TransactionList
                 transactions={currentBudget.transactions}
                 categories={currentBudget.categories}
-                onEdit={(tx) => { setShowCategoryManager(false); setEditingTransaction(tx); setShowTransactionForm(true) }}
+                onEdit={(tx) => { setEditingTransaction(tx); setShowTransactionForm(true) }}
                 onDelete={deleteTransaction}
               />
             )}

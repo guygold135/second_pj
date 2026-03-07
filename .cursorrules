@@ -11,3 +11,5 @@
 אם אני מבקש שהagent ישנה משהוא בקוד שמשפיע על תפקוד ה db בsupabase יש להדגיש את זה ולתת SQL מוכן להדבקה שמותאם לסיטואציה החדשה
 
  תרשום את כל המילים - גם עברית וגם אנגלית מילה מילה מימין לשמאל ההחרגה היחידה היא רק אם המשפט כולו הוא באנגלית - רלוונטי להערות קוד ולתשובות בצאט
+
+Every UI change (components, pages, forms) must follow the existing site style: use designSystem.ts, the same colors, typography, spacing, and existing components; do not introduce new or inconsistent styling.

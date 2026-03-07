@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, type ReactNode,
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 
-export type Recurrence = 'none' | 'daily' | 'weekly'
+export type Recurrence = 'none' | 'daily' | 'weekly' | 'custom'
 
 export interface Mission {
   id: string
@@ -10,12 +10,21 @@ export interface Mission {
   category: string
   recurrence: Recurrence
   duration: string
+  /** Repeat configuration (persisted to Supabase) */
+  repeatUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months'
+  repeatValue?: number
+  missedRepeats?: number
+  repeatLocked?: boolean
+  repeatLastEvaluatedAt?: string
+  repeatCompletedCount?: number
   targetCount?: number
   progressCount?: number
   createdAt: string
   isCompleted: boolean
   completedAt?: string
   orderInCategory?: number
+  /** Client-only: order before marking complete; restored when unchecking. Not persisted. */
+  orderInCategoryBeforeComplete?: number
   goalId?: string
   /** For goals with missions_weighted: this mission's share of the goal (0–100). Sum of all mission weights for a goal should be 100. */
   weightPercent?: number
@@ -40,6 +49,36 @@ type MissionsContextValue = {
 const MissionsContext = createContext<MissionsContextValue | null>(null)
 
 function missionToRow(m: Mission) {
+  // Persist-friendly recurrence: some databases may only allow 'none' | 'daily' | 'weekly' in this column.
+  // Custom repeats are represented via repeat_unit/repeat_value, so we store 'none' in recurrence for them.
+  const persistenceRecurrence: Recurrence =
+    m.recurrence === 'custom' ? 'none' : m.recurrence
+
+  return {
+    id: m.id,
+    title: m.title,
+    category: m.category,
+    recurrence: persistenceRecurrence,
+    duration: m.duration ?? '',
+    target_count: m.targetCount ?? null,
+    progress_count: m.progressCount ?? null,
+    created_at: m.createdAt,
+    is_completed: m.isCompleted,
+    completed_at: m.completedAt ?? null,
+    order_in_category: m.orderInCategory ?? null,
+    goal_id: m.goalId ?? null,
+    weight_percent: m.weightPercent ?? null,
+    repeat_unit: m.repeatUnit ?? null,
+    repeat_value: m.repeatValue ?? null,
+    missed_repeats: m.missedRepeats ?? null,
+    repeat_locked: m.repeatLocked ?? null,
+    repeat_last_evaluated_at: m.repeatLastEvaluatedAt ?? null,
+    repeat_completed_count: m.repeatCompletedCount ?? null,
+  }
+}
+
+/** Row with only columns that exist in missions before the repeat migration (for backward‑compatible save). */
+function missionToRowBase(m: Mission) {
   return {
     id: m.id,
     title: m.title,
@@ -58,11 +97,15 @@ function missionToRow(m: Mission) {
 }
 
 function rowToMission(r: Record<string, unknown>): Mission {
+  const storedRecurrence = (r.recurrence as Mission['recurrence']) ?? 'none'
+  const hasRepeatConfig = r.repeat_unit != null || (r.repeat_value != null && Number(r.repeat_value) > 0)
+  const recurrence: Mission['recurrence'] = hasRepeatConfig ? 'custom' : storedRecurrence
+
   return {
     id: String(r.id),
     title: String(r.title),
     category: String(r.category),
-    recurrence: (r.recurrence as Mission['recurrence']) ?? 'none',
+    recurrence,
     duration: String(r.duration ?? ''),
     targetCount: r.target_count != null ? Number(r.target_count) : undefined,
     progressCount: r.progress_count != null ? Number(r.progress_count) : undefined,
@@ -72,6 +115,12 @@ function rowToMission(r: Record<string, unknown>): Mission {
     orderInCategory: r.order_in_category != null ? Number(r.order_in_category) : undefined,
     goalId: r.goal_id != null ? String(r.goal_id) : undefined,
     weightPercent: r.weight_percent != null ? Number(r.weight_percent) : undefined,
+    repeatUnit: r.repeat_unit != null ? (r.repeat_unit as Mission['repeatUnit']) : undefined,
+    repeatValue: r.repeat_value != null ? Number(r.repeat_value) : undefined,
+    missedRepeats: r.missed_repeats != null ? Number(r.missed_repeats) : undefined,
+    repeatLocked: r.repeat_locked != null ? Boolean(r.repeat_locked) : undefined,
+    repeatLastEvaluatedAt: r.repeat_last_evaluated_at != null ? String(r.repeat_last_evaluated_at) : undefined,
+    repeatCompletedCount: r.repeat_completed_count != null ? Number(r.repeat_completed_count) : undefined,
   }
 }
 
@@ -158,14 +207,25 @@ export function MissionsProvider({ children }: { children: ReactNode }) {
         try {
           const userId = user.id
           const rows = missions.map((m) => ({ ...missionToRow(m), user_id: userId }))
+          const rowsBase = missions.map((m) => ({ ...missionToRowBase(m), user_id: userId }))
           if (import.meta.env.DEV) {
             console.log('[MissionsContext] Writing to Supabase:', rows.length, 'missions, order length:', categoriesOrder.length)
           }
           const currentIds = new Set(missions.map((m) => m.id))
           if (rows.length > 0) {
             const { error: missionsError } = await client.from('missions').upsert(rows, { onConflict: 'id' })
-            if (missionsError) throw missionsError
-            if (import.meta.env.DEV) {
+            if (missionsError) {
+              const msg = missionsError.message ?? String(missionsError)
+              if (/repeat_unit|repeat_value|missed_repeats|repeat_locked|repeat_last_evaluated_at|repeat_completed_count|column.*does not exist/i.test(msg)) {
+                const { error: fallbackError } = await client.from('missions').upsert(rowsBase, { onConflict: 'id' })
+                if (fallbackError) throw fallbackError
+                if (import.meta.env.DEV) {
+                  console.log('[MissionsContext] Supabase: missions upsert OK (base columns only; run repeat migration for full persist)')
+                }
+              } else {
+                throw missionsError
+              }
+            } else if (import.meta.env.DEV) {
               console.log('[MissionsContext] Supabase: missions upsert OK')
             }
           }

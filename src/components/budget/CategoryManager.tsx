@@ -38,6 +38,8 @@ const PRESET_COLORS: { value: string; label: string; hex: string }[] = [
   { value: 'text-slate-400', label: 'slate', hex: '#94a3b8' },
 ]
 
+export const PRESET_COLOR_VALUES = PRESET_COLORS.map((p) => p.value)
+
 function labelFromTailwindTextClass(value: string): string {
   if (value === 'text-white') return 'white'
   const m = value.match(/^text-([a-z]+)-\d{3}$/)
@@ -45,14 +47,16 @@ function labelFromTailwindTextClass(value: string): string {
   return value.replace(/^text-/, '')
 }
 
-function ColorSelect({
+export function ColorSelect({
   value,
   onChange,
   className = '',
+  disabledColors = [],
 }: {
   value: string
   onChange: (v: string) => void
   className?: string
+  disabledColors?: string[]
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -61,6 +65,7 @@ function ColorSelect({
     (value
       ? { value, label: labelFromTailwindTextClass(value), hex: getCategoryColorHex(value) }
       : PRESET_COLORS[0]!)
+  const usedSet = new Set(disabledColors)
 
   useEffect(() => {
     if (!open) return
@@ -85,19 +90,33 @@ function ColorSelect({
         </svg>
       </button>
       {open && (
-        <ul className="absolute left-0 top-full z-10 mt-1 max-h-56 w-full overflow-auto rounded border border-gray-700 bg-slate-900 py-1 shadow-lg">
-          {PRESET_COLORS.map((p) => (
-            <li key={p.value}>
-              <button
-                type="button"
-                onClick={() => { onChange(p.value); setOpen(false) }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-white hover:bg-slate-800"
-              >
-                <span className="h-4 w-4 shrink-0 rounded-full border border-gray-600" style={{ backgroundColor: p.hex }} aria-hidden />
-                <span>{p.label}</span>
-              </button>
-            </li>
-          ))}
+        <ul className="absolute left-0 top-full z-10 mt-1 max-h-56 w-full overflow-auto rounded border border-gray-700 bg-slate-900 py-1 shadow-lg scrollbar-hide">
+          {PRESET_COLORS.map((p) => {
+            const disabled = usedSet.has(p.value)
+            return (
+              <li key={p.value}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!disabled) {
+                      onChange(p.value)
+                      setOpen(false)
+                    }
+                  }}
+                  disabled={disabled}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${disabled ? 'cursor-default opacity-60' : 'text-white hover:bg-slate-800'}`}
+                >
+                  <span className="h-4 w-4 shrink-0 rounded-full border border-gray-600" style={{ backgroundColor: p.hex }} aria-hidden />
+                  <span>{p.label}</span>
+                  {p.value === value && (
+                    <svg className="ml-auto h-4 w-4 shrink-0 text-cyan-400" width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                      <path d="M7.49991 0.877045C3.84222 0.877045 0.877075 3.84219 0.877075 7.49988C0.877075 11.1575 3.84222 14.1227 7.49991 14.1227C11.1576 14.1227 14.1227 11.1575 14.1227 7.49988C14.1227 3.84219 11.1576 0.877045 7.49991 0.877045ZM1.82708 7.49988C1.82708 4.36686 4.36689 1.82704 7.49991 1.82704C10.6329 1.82704 13.1727 4.36686 13.1727 7.49988C13.1727 10.6329 10.6329 13.1727 7.49991 13.1727C4.36689 13.1727 1.82708 10.6329 1.82708 7.49988ZM10.1589 5.53774C10.3178 5.31191 10.2636 5.00001 10.0378 4.84109C9.81194 4.68217 9.50004 4.73642 9.34112 4.96225L6.51977 8.97154L5.35681 7.78706C5.16334 7.59002 4.84677 7.58711 4.64973 7.78058C4.45268 7.97404 4.44978 8.29061 4.64325 8.48765L6.22658 10.1003C6.33054 10.2062 6.47617 10.2604 6.62407 10.2483C6.77197 10.2363 6.90686 10.1591 6.99226 10.0377L10.1589 5.53774Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>
@@ -192,7 +211,11 @@ export function CategoryManager({ categories, initialEditId, onCloseSingleEdit, 
             className="w-24 rounded border border-gray-700 bg-slate-900 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
             placeholder="Budget"
           />
-          <ColorSelect value={editColor} onChange={setEditColor} />
+          <ColorSelect
+            value={editColor}
+            onChange={setEditColor}
+            disabledColors={categories.filter((c) => c.id !== editingId).map((c) => c.color ?? 'text-white')}
+          />
           <button type="button" onClick={() => saveEdit(true)} className={btn.primary}>
             Done
           </button>
@@ -266,7 +289,12 @@ export function CategoryManager({ categories, initialEditId, onCloseSingleEdit, 
                   onKeyDown={(e) => handleBudgetKeyDown(e, 'edit', setEditBudget)}
                   className="w-20 rounded border border-gray-700 bg-slate-900 px-2 py-1 text-sm text-white focus:border-cyan-500 focus:outline-none"
                 />
-                <ColorSelect value={editColor} onChange={setEditColor} className="min-w-0" />
+                <ColorSelect
+                  value={editColor}
+                  onChange={setEditColor}
+                  className="min-w-0"
+                  disabledColors={categories.filter((other) => other.id !== c.id).map((other) => other.color ?? 'text-white')}
+                />
                 <button type="button" onClick={() => saveEdit()} className="rounded px-2 py-1 text-sm text-cyan-400 hover:bg-cyan-500/20">Done</button>
               </>
             ) : (
@@ -277,11 +305,12 @@ export function CategoryManager({ categories, initialEditId, onCloseSingleEdit, 
                   <button
                     type="button"
                     onClick={() => startEdit(c)}
-                    className="rounded p-1 text-gray-500 hover:bg-slate-800 hover:text-white"
+                    className={btn.iconEdit}
                     aria-label={`Edit ${c.name}`}
                   >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                     </svg>
                   </button>
                   <button
