@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "react-day-picker/style.css";
 
 /*
   Global styles and design tokens for Mission Flow.
@@ -359,4 +360,63 @@ body {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/*
+ * Goals date range picker: when custom classNames are passed, the day button does NOT
+ * get .rdp-day_button, so we target the button inside the day cell (td) by cell class.
+ * This makes all selected days (in-month and outside) use the same slate-600 background.
+ */
+.goal-date-range-picker.rdp-root {
+  --rdp-accent-color: #475569;
+  --rdp-accent-background-color: #475569;
+  --rdp-range_start-date-background-color: #475569;
+  --rdp-range_end-date-background-color: #475569;
+  --rdp-range_middle-background-color: #475569;
+  --rdp-range_start-color: #f8fafc;
+  --rdp-range_end-color: #f8fafc;
+  --rdp-range_middle-color: #f8fafc;
+}
+/* Target button inside day cell — middle of range and single/outside selected: slate-600 */
+.goal-date-range-picker .rdp-range_middle > button,
+.goal-date-range-picker .rdp-selected > button,
+.goal-date-range-picker .rdp-outside.rdp-selected > button {
+  background-color: #475569 !important;
+  color: #f8fafc !important;
+}
+/* First and last selected days (range start/end): white background, black number */
+.goal-date-range-picker .rdp-range_start > button,
+.goal-date-range-picker .rdp-range_end > button {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+.goal-date-range-picker .rdp-range_middle > button:hover,
+.goal-date-range-picker .rdp-selected > button:hover,
+.goal-date-range-picker .rdp-outside.rdp-selected > button:hover {
+  background-color: #64748b !important;
+  color: #f8fafc !important;
+}
+.goal-date-range-picker .rdp-range_start > button:hover,
+.goal-date-range-picker .rdp-range_end > button:hover {
+  background-color: #f1f5f9 !important;
+  color: #000000 !important;
+}
+/* Today (current day) in goal picker: look like a normal day, not disabled */
+.goal-date-range-picker .rdp-today.rdp-disabled > button {
+  color: #e2e8f0 !important;
+  text-decoration: none !important;
+}
+/* Today indicator: arrow instead of dot */
+.goal-date-range-picker .rdp-today > button::after {
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  border-left: 4px solid transparent !important;
+  border-right: 4px solid transparent !important;
+  border-bottom: 5px solid currentColor !important;
+  bottom: 2px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
 }

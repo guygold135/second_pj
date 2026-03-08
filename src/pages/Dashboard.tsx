@@ -109,17 +109,27 @@ export default function Dashboard() {
 
   const stakedMIds = useMemo(() => { const m = new Map<string, number>(); for (const s of stakes) if (s.itemType === 'mission') m.set(s.itemId, s.amount); return m }, [stakes])
   const today = now.toISOString().slice(0, 10)
+  /** Missions that are defined in Goals (standalone or goal exists). */
+  const missionsInSync = useMemo(
+    () => missions.filter((m) => !m.goalId || goals.some((g) => g.id === m.goalId)),
+    [missions, goals],
+  )
   const todayMissions = useMemo(
     () =>
-      missions
+      missionsInSync
         .filter((m) => m.recurrence === 'daily' || m.createdAt?.slice(0, 10) === today)
         .slice(0, 14),
-    [missions, today],
+    [missionsInSync, today],
   )
-  const todayLeft = useMemo(() => todayMissions.filter((m) => !m.isCompleted).length, [todayMissions])
-  const completedToday = useMemo(() => missions.filter((m) => m.completedAt?.slice(0, 10) === today).length, [missions, today])
-  const activeMissions = useMemo(() => missions.filter((m) => !m.isCompleted), [missions])
-  const goalList = useMemo(() => goals.map((g) => ({ ...g, pct: goalProgress(g, missions) })).sort((a, b) => b.pct - a.pct), [goals, missions])
+  /** Only active (incomplete) and relevant missions for today — what we display in the list. */
+  const todayMissionsActive = useMemo(
+    () => todayMissions.filter((m) => !m.isCompleted),
+    [todayMissions],
+  )
+  const todayLeft = useMemo(() => todayMissionsActive.length, [todayMissionsActive])
+  const completedToday = useMemo(() => missionsInSync.filter((m) => m.completedAt?.slice(0, 10) === today).length, [missionsInSync, today])
+  const activeMissions = useMemo(() => missionsInSync.filter((m) => !m.isCompleted), [missionsInSync])
+  const goalList = useMemo(() => goals.map((g) => ({ ...g, pct: goalProgress(g, missionsInSync) })).sort((a, b) => b.pct - a.pct), [goals, missionsInSync])
 
   const budgetSnap = useMemo(() => {
     const cb = budgets.find((b) => b.id === currentId) ?? (() => { const { start, end } = getMonthStartEnd(now); return budgets.find((b) => b.startDate <= end && b.endDate >= start) })()
@@ -157,11 +167,9 @@ export default function Dashboard() {
     const id = uuidv4()
     const m = { id, title, category: 'General', recurrence: 'none' as const, duration: '', isCompleted: false, createdAt }
     setMissions((prev) => [m, ...prev])
-    if (supabase && user?.id) {
-      supabase.from('missions').insert({ id, title, category: 'General', recurrence: 'none', duration: '', is_completed: false, created_at: createdAt, user_id: user.id }).then(({ error }) => { if (error) console.error(error) })
-    }
+    // Persistence: MissionsContext syncs to Supabase (single source of truth for mission row structure)
     toast.success('Mission added')
-  }, [setMissions, user?.id, toast])
+  }, [setMissions, toast])
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
@@ -201,16 +209,16 @@ export default function Dashboard() {
                 <p className="text-sm font-semibold text-white">Today's Missions</p>
                 <p className="text-xs text-gray-500">{completedToday} done · {todayLeft} left</p>
               </div>
-              <Link to="/my-missions" className="text-xs text-gray-600 hover:text-white">All →</Link>
+              <Link to="/goals" className="text-xs text-gray-600 hover:text-white">All →</Link>
             </div>
             <div className="p-2">
               {mLoad ? (
                 <p className="px-3 py-4 text-sm text-gray-500">Loading…</p>
-              ) : todayMissions.length === 0 ? (
+              ) : todayMissionsActive.length === 0 ? (
                 <p className="px-3 py-4 text-sm text-gray-500">No missions today.</p>
               ) : (
                 <div className="space-y-0.5">
-                  {todayMissions.map((m) => {
+                  {todayMissionsActive.map((m) => {
                     const hasStake = stakedMIds.has(m.id)
                     const amt = stakedMIds.get(m.id)
                     return (

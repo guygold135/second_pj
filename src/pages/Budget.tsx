@@ -26,7 +26,7 @@ import { CategoryCard } from '../components/budget/CategoryCard'
 import { TransactionForm } from '../components/budget/TransactionForm'
 import { TransactionList } from '../components/budget/TransactionList'
 import { ColorSelect, PRESET_COLOR_VALUES } from '../components/budget/CategoryManager'
-import { btn, card, emptyState, loadingState, modal, pageContainer } from '../styles/designSystem'
+import { btn, emptyState, loadingState, modal, pageContainer } from '../styles/designSystem'
 import OpportunityCost, {
   getBlendedRateAndHorizon,
   compoundGrowth,

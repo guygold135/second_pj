@@ -9,7 +9,7 @@ import { card, input, pageContainer, btn, alert } from '../styles/designSystem'
 
 export default function Settings() {
   const { user } = useAuth()
-  const { currencyCode, setCurrencyCode, formatMoney } = useCurrency()
+  const { currencyCode, setCurrencyCode } = useCurrency()
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)

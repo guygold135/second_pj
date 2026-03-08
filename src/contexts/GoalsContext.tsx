@@ -33,6 +33,9 @@ export interface Goal {
   currentCount?: number
   /** For count/milestones mode: label for what we're counting (e.g. "chapters read"). */
   milestoneLabel?: string
+  /** Optional deadline range (from calendar when adding goal). */
+  deadlineFrom?: string
+  deadlineTo?: string
   /** For persistence: set when loading from Supabase. */
   createdAt?: string
   updatedAt?: string
@@ -43,7 +46,7 @@ const STORAGE_KEY_GOALS = 'goals_app_data'
 type GoalsContextValue = {
   goals: Goal[]
   setGoals: Dispatch<SetStateAction<Goal[]>>
-  addGoal: (title: string, trackingMode?: GoalTrackingMode) => Goal | undefined
+  addGoal: (title: string, trackingMode?: GoalTrackingMode, dateRange?: { from: Date; to: Date }) => Goal | undefined
   updateGoal: (id: string, updates: Partial<Goal>) => void
   deleteGoal: (id: string) => void
   getGoalById: (id: string) => Goal | undefined
@@ -65,6 +68,8 @@ function goalToRow(g: Goal) {
     target_count: g.targetCount ?? null,
     current_count: g.currentCount ?? null,
     milestone_label: g.milestoneLabel ?? null,
+    deadline_from: g.deadlineFrom ?? null,
+    deadline_to: g.deadlineTo ?? null,
     created_at: g.createdAt ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }
@@ -82,6 +87,8 @@ function rowToGoal(r: Record<string, unknown>): Goal {
     targetCount: r.target_count != null ? Number(r.target_count) : undefined,
     currentCount: r.current_count != null ? Number(r.current_count) : undefined,
     milestoneLabel: r.milestone_label != null ? String(r.milestone_label) : undefined,
+    deadlineFrom: r.deadline_from != null ? String(r.deadline_from) : undefined,
+    deadlineTo: r.deadline_to != null ? String(r.deadline_to) : undefined,
     createdAt: r.created_at != null ? String(r.created_at) : undefined,
     updatedAt: r.updated_at != null ? String(r.updated_at) : undefined,
   }
@@ -110,12 +117,16 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
             .eq('user_id', user.id)
             .order('created_at', { ascending: true })
           if (cancelled) return
-          if (error) throw error
+          if (error) {
+            console.error('[GoalsContext] Supabase goals select error:', error.message, error)
+            throw error
+          }
           const loaded = (data ?? []).map((r: Record<string, unknown>) => rowToGoal(r))
           setGoals(loaded)
           if (import.meta.env.DEV) {
-            console.log('[GoalsContext] Loaded from Supabase:', loaded.length, 'goals')
+            console.log('[GoalsContext] Loaded from Supabase:', loaded.length, 'goals', data?.length === 0 ? '(table may be empty or RLS blocking)' : '')
           }
+          if (!cancelled) hasLoadedRef.current = true
         } catch (e) {
           if (import.meta.env.DEV) {
             console.error('[GoalsContext] Load from Supabase failed:', e)
@@ -137,13 +148,9 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         } catch (_) {
           // ignore
         }
+        if (!cancelled) hasLoadedRef.current = true
       }
-      if (!cancelled) {
-        setIsLoading(false)
-        setTimeout(() => {
-          hasLoadedRef.current = true
-        }, 0)
-      }
+      if (!cancelled) setIsLoading(false)
     }
     run()
     return () => {
@@ -160,6 +167,11 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     if (client && user) {
       const save = async () => {
         try {
+          const { data: { session } } = await client.auth.getSession()
+          if (!session) {
+            if (import.meta.env.DEV) console.warn('[GoalsContext] No Supabase session, skip persist (sign in may be required)')
+            return
+          }
           const userId = user.id
           const rows = goals.map((g) => ({ ...goalToRow(g), user_id: userId }))
           if (import.meta.env.DEV) {
@@ -167,19 +179,36 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
           }
           const currentIds = new Set(goals.map((g) => g.id))
           if (rows.length > 0) {
-            const { error } = await client.from('goals').upsert(rows, { onConflict: 'id' })
-            if (error) throw error
+            let err = (await client.from('goals').upsert(rows, { onConflict: 'id' })).error
+            if (err && /column.*does not exist|undefined column|deadline_from|deadline_to/i.test(err.message)) {
+              const minimalRows = goals.map((g) => ({
+                id: g.id,
+                user_id: userId,
+                title: g.title,
+                tracking_mode: g.trackingMode ?? null,
+                created_at: g.createdAt ?? new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }))
+              err = (await client.from('goals').upsert(minimalRows, { onConflict: 'id' })).error
+            }
+            if (err) {
+              console.error('[GoalsContext] goals upsert failed:', err.code, err.message, 'payload sample:', rows[0])
+              throw err
+            }
             if (import.meta.env.DEV) {
               console.log('[GoalsContext] Supabase: goals upsert OK')
             }
           }
-          const { data: existing } = await client.from('goals').select('id').eq('user_id', userId)
-          const toDelete = (existing ?? []).filter((r: { id: string }) => !currentIds.has(r.id)).map((r: { id: string }) => r.id)
-          if (toDelete.length > 0) {
-            const { error: deleteError } = await client.from('goals').delete().in('id', toDelete)
-            if (deleteError) throw deleteError
-            if (import.meta.env.DEV) {
-              console.log('[GoalsContext] Supabase: deleted', toDelete.length, 'removed goal(s)')
+          // Only delete from DB when we have goals in state (avoid wiping table if load returned empty by mistake)
+          if (goals.length > 0) {
+            const { data: existing } = await client.from('goals').select('id').eq('user_id', userId)
+            const toDelete = (existing ?? []).filter((r: { id: string }) => !currentIds.has(r.id)).map((r: { id: string }) => r.id)
+            if (toDelete.length > 0) {
+              const { error: deleteError } = await client.from('goals').delete().in('id', toDelete)
+              if (deleteError) throw deleteError
+              if (import.meta.env.DEV) {
+                console.log('[GoalsContext] Supabase: deleted', toDelete.length, 'removed goal(s)')
+              }
             }
           }
         } catch (e) {
@@ -189,7 +218,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      save()
+      void save()
     } else {
       if (import.meta.env.DEV) {
         console.log('[GoalsContext] Supabase not configured, saving to localStorage only')
@@ -202,17 +231,22 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     }
   }, [goals, user?.id])
 
-  const addGoal = useCallback((title: string, trackingMode?: GoalTrackingMode): Goal | undefined => {
-    const trimmed = title.trim()
-    if (!trimmed) return undefined
-    const newGoal: Goal = {
-      id: crypto.randomUUID?.() ?? `goal-${Date.now()}`,
-      title: trimmed,
-      trackingMode: trackingMode ?? 'missions_equal',
-    }
-    setGoals((prev) => [...prev, newGoal])
-    return newGoal
-  }, [])
+  const addGoal = useCallback(
+    (title: string, trackingMode?: GoalTrackingMode, dateRange?: { from: Date; to: Date }): Goal | undefined => {
+      const trimmed = title.trim()
+      if (!trimmed) return undefined
+      const newGoal: Goal = {
+        id: crypto.randomUUID?.() ?? `goal-${Date.now()}`,
+        title: trimmed,
+        trackingMode: trackingMode ?? 'missions_equal',
+        deadlineFrom: dateRange?.from?.toISOString?.()?.slice(0, 10),
+        deadlineTo: dateRange?.to?.toISOString?.()?.slice(0, 10),
+      }
+      setGoals((prev) => [...prev, newGoal])
+      return newGoal
+    },
+    [],
+  )
 
   const updateGoal = useCallback((id: string, updates: Partial<Goal>) => {
     setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)))

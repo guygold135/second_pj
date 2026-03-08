@@ -19,8 +19,8 @@ import { User as UserIcon, Settings as SettingsIcon, LogOut } from 'lucide-react
 
 const navLinks = [
   { to: '/dashboard', label: 'Dashboard' },
-  { to: '/my-missions', label: 'My Missions' },
   { to: '/goals', label: 'Goals' },
+  { to: '/calendar', label: 'Calendar' },
   { to: '/budget', label: 'Budget' },
 ]
 
@@ -48,8 +48,10 @@ export default function Layout() {
     signOut()
   }
 
+  const isCalendar = location.pathname === '/calendar'
+
   return (
-    <div className="min-h-screen theme-bg theme-text">
+    <div className="flex min-h-screen flex-col theme-bg theme-text">
       <header className="sticky top-0 z-50 border-b theme-border backdrop-blur-md theme-bg-header">
         <div className="flex w-full items-center justify-between gap-6 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex flex-1 items-center">
@@ -191,7 +193,7 @@ export default function Layout() {
         </div>
       )}
 
-      <main className="min-h-[60vh] pb-10 pt-6">
+      <main className={isCalendar ? 'flex min-h-0 flex-1 flex-col' : 'min-h-[60vh] pb-10 pt-6'}>
         <Outlet />
       </main>
     </div>

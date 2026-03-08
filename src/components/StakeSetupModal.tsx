@@ -2,7 +2,15 @@ import { useState, useMemo, useEffect, useCallback, Component, type ReactNode } 
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { useAuth } from '../contexts/AuthContext'
+import { Calendar } from './ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { modal, input, btn } from '../styles/designSystem'
+
+function startOfDay(d: Date) {
+  const out = new Date(d)
+  out.setHours(0, 0, 0, 0)
+  return out
+}
 
 class StakeModalErrorBoundary extends Component<
   { children: ReactNode; onBack: () => void },
@@ -115,6 +123,8 @@ export type StakeSetupModalProps = {
   itemTitle: string
   itemType: 'mission' | 'goal'
   defaultDueDate?: string
+  /** When true, deadline is read-only (from goal/mission) and cannot be changed. */
+  deadlineLocked?: boolean
   onClose: () => void
   onStaked: (info: StakeInfo) => void
 }
@@ -264,6 +274,7 @@ export function StakeSetupModal({
   itemTitle,
   itemType,
   defaultDueDate,
+  deadlineLocked = false,
   onClose,
   onStaked,
 }: StakeSetupModalProps) {
@@ -409,14 +420,43 @@ export function StakeSetupModal({
               </select>
             </div>
             <div>
+              {deadlineLocked ? (
+                <p className="mb-1.5 block text-sm font-medium text-gray-400">
+                  {itemType === 'goal' ? 'Goal' : 'Mission'} deadline — {dueDate ? new Date(dueDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                </p>
+              ) : (
+                <>
               <label className="mb-1.5 block text-sm font-medium text-gray-400">Deadline</label>
-              <input
-                type="date"
-                min={minDate}
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className={input.base}
-              />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full rounded-lg border border-gray-700 bg-slate-800 px-4 py-2.5 text-left text-sm text-white transition-colors duration-200 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:ring-offset-0"
+                    >
+                      {dueDate
+                        ? new Date(dueDate + 'T12:00:00').toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })
+                        : 'Select deadline'}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-auto p-0">
+                    <div className="rdp-root goal-date-range-picker w-fit rounded-lg border border-gray-800 bg-slate-900/80 p-3">
+                      <Calendar
+                        mode="single"
+                        selected={dueDate ? new Date(dueDate + 'T12:00:00') : undefined}
+                        onSelect={(d) => d && setDueDate(d.toISOString().slice(0, 10))}
+                        disabled={(date) => startOfDay(date).getTime() < startOfDay(new Date()).getTime()}
+                        defaultMonth={dueDate ? new Date(dueDate + 'T12:00:00') : new Date()}
+                        className="w-fit rounded-lg border-0"
+                      />
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                </>
+              )}
             </div>
             <div>
               <p className="mb-2 text-sm font-medium text-gray-400">If you don’t complete</p>

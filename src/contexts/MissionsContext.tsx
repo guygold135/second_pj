@@ -157,6 +157,7 @@ export function MissionsProvider({ children }: { children: ReactNode }) {
           if (import.meta.env.DEV) {
             console.log('[MissionsContext] Loaded from Supabase:', loadedMissions.length, 'missions')
           }
+          if (!cancelled) hasLoadedRef.current = true
         } catch (e) {
           if (import.meta.env.DEV) {
             console.error('[MissionsContext] Load from Supabase failed:', e)
@@ -182,13 +183,9 @@ export function MissionsProvider({ children }: { children: ReactNode }) {
         } catch (_) {
           // ignore parse errors
         }
+        if (!cancelled) hasLoadedRef.current = true
       }
-      if (!cancelled) {
-        setIsLoading(false)
-        setTimeout(() => {
-          hasLoadedRef.current = true
-        }, 0)
-      }
+      if (!cancelled) setIsLoading(false)
     }
     run()
     return () => {
@@ -205,6 +202,11 @@ export function MissionsProvider({ children }: { children: ReactNode }) {
     if (client && user) {
       const save = async () => {
         try {
+          const { data: { session } } = await client.auth.getSession()
+          if (!session) {
+            if (import.meta.env.DEV) console.warn('[MissionsContext] No Supabase session, skip persist (sign in may be required)')
+            return
+          }
           const userId = user.id
           const rows = missions.map((m) => ({ ...missionToRow(m), user_id: userId }))
           const rowsBase = missions.map((m) => ({ ...missionToRowBase(m), user_id: userId }))
@@ -229,13 +231,15 @@ export function MissionsProvider({ children }: { children: ReactNode }) {
               console.log('[MissionsContext] Supabase: missions upsert OK')
             }
           }
-          const { data: existing } = await client.from('missions').select('id').eq('user_id', userId)
-          const toDelete = (existing ?? []).filter((r: { id: string }) => !currentIds.has(r.id)).map((r: { id: string }) => r.id)
-          if (toDelete.length > 0) {
-            const { error: deleteError } = await client.from('missions').delete().in('id', toDelete)
-            if (deleteError) throw deleteError
-            if (import.meta.env.DEV) {
-              console.log('[MissionsContext] Supabase: deleted', toDelete.length, 'removed mission(s)')
+          if (missions.length > 0) {
+            const { data: existing } = await client.from('missions').select('id').eq('user_id', userId)
+            const toDelete = (existing ?? []).filter((r: { id: string }) => !currentIds.has(r.id)).map((r: { id: string }) => r.id)
+            if (toDelete.length > 0) {
+              const { error: deleteError } = await client.from('missions').delete().in('id', toDelete)
+              if (deleteError) throw deleteError
+              if (import.meta.env.DEV) {
+                console.log('[MissionsContext] Supabase: deleted', toDelete.length, 'removed mission(s)')
+              }
             }
           }
           const { error: orderError } = await client
@@ -252,7 +256,7 @@ export function MissionsProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      save()
+      void save()
     } else {
       if (import.meta.env.DEV) {
         console.log('[MissionsContext] Supabase not configured, saving to localStorage only')

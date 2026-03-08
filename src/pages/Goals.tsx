@@ -4,44 +4,36 @@ import { useMissions, GOAL_FILTER_PREFIX, type Mission, type Recurrence } from '
 import { v4 as uuidv4 } from 'uuid'
 import { StakeSetupModal, StakeBadge, type StakeInfo } from '../components/StakeSetupModal'
 import { GlowButton } from '../components/ui/glow-button'
-import { GlowingEffect } from '../components/ui/glowing-effect'
+import { NeonCheckbox } from '../components/ui/animated-check-box'
+import { Calendar } from '../components/ui/calendar'
+import { ArrowLeft, ArrowRight, RefreshCcw } from 'lucide-react'
+import type { DateRange } from 'react-day-picker'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { btn } from '../styles/designSystem'
+import { useToast } from '../components/Toast'
+import { btn, input, modal, pageContainer } from '../styles/designSystem'
 
-function GoalIcon({ mode }: { mode?: GoalTrackingMode }) {
-  const m = mode ?? 'missions_equal'
-  const emojiClass = 'text-xl leading-none'
-  if (m === 'time') {
-    return (
-      <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v5l3 2" />
-      </svg>
-    )
-  }
-  if (m === 'count') {
-    return (
-      <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <defs>
-          <linearGradient id="goalBarsGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#fb923c" />
-            <stop offset="100%" stopColor="#f472b6" />
-          </linearGradient>
-        </defs>
-        {/* Ascending bars */}
-        <rect x={3} y={16} width={4} height={6} rx={0.5} fill="url(#goalBarsGradient)" />
-        <rect x={8} y={12} width={4} height={10} rx={0.5} fill="url(#goalBarsGradient)" />
-        <rect x={13} y={8} width={4} height={14} rx={0.5} fill="url(#goalBarsGradient)" />
-        <rect x={18} y={4} width={4} height={18} rx={0.5} fill="url(#goalBarsGradient)" />
-      </svg>
-    )
-  }
-  if (m === 'missions_weighted') {
-    return <span className={emojiClass} aria-hidden>🎯</span>
-  }
-  // missions_equal (default) – same as MyMissions
-  return <span className={emojiClass} aria-hidden>🎯</span>
+/** Nav icon for goal date range calendar: ArrowRight (next month), ArrowLeft (prev month). */
+function GoalCalendarChevron({
+  orientation,
+  className,
+  size = 24,
+}: {
+  orientation?: 'left' | 'right' | 'up' | 'down'
+  className?: string
+  size?: number
+}) {
+  if (orientation === 'left') return <ArrowLeft size={size} className={className} strokeWidth={1.75} aria-hidden />
+  if (orientation === 'up') return <ArrowRight size={size} className={className} strokeWidth={1.75} aria-hidden style={{ transform: 'rotate(-90deg)' }} />
+  if (orientation === 'down') return <ArrowRight size={size} className={className} strokeWidth={1.75} aria-hidden style={{ transform: 'rotate(90deg)' }} />
+  return <ArrowRight size={size} className={className} strokeWidth={1.75} aria-hidden />
+}
+
+/** Start of day at 00:00:00 for date comparison. */
+function startOfDay(d: Date): Date {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  return x
 }
 
 function getGoalProgressFromMissions(
@@ -94,6 +86,24 @@ function formatTimerElapsed(seconds: number): string {
 function formatTargetCount(n: number): string {
   if (n < 1000) return String(n)
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+/** Format goal deadline as single date (end of range), e.g. "Mar 16" or "Mar 16, 2025" if not current year. */
+function formatDeadlineRange(deadlineFrom?: string, deadlineTo?: string): string | null {
+  const dateStr = deadlineTo ?? deadlineFrom
+  if (!dateStr) return null
+  try {
+    const d = new Date(dateStr + 'T12:00:00')
+    if (Number.isNaN(d.getTime())) return null
+    const currentYear = new Date().getFullYear()
+    const showYear = d.getFullYear() !== currentYear
+    const opts: Intl.DateTimeFormatOptions = showYear
+      ? { month: 'short', day: 'numeric', year: 'numeric' }
+      : { month: 'short', day: 'numeric' }
+    return d.toLocaleDateString('en-US', opts)
+  } catch {
+    return null
+  }
 }
 
 const ITEM_HEIGHT = 40
@@ -319,15 +329,20 @@ function DurationCombobox({
 }
 
 export default function Goals() {
-  const { goals, addGoal: addGoalToContext, updateGoal, deleteGoal } = useGoals()
+  const { goals, addGoal: addGoalToContext, updateGoal, deleteGoal, getGoalById } = useGoals()
   const { missions, setMissions } = useMissions()
+  const { toast } = useToast()
   const [showAddForm, setShowAddForm] = useState(false)
   const [newGoalTitle, setNewGoalTitle] = useState('')
   const [trackingMode, setTrackingMode] = useState<GoalTrackingMode>('missions_equal')
   /** After adding a goal, we show measurement step or add-mission panel; null when done. */
   const [justAddedGoal, setJustAddedGoal] = useState<Goal | null>(null)
   /** When set, user is in add-missions flow but goal not created yet; goal is created only on Done. */
-  const [pendingGoalCreation, setPendingGoalCreation] = useState<{ title: string; trackingMode: 'missions_equal' | 'missions_weighted' } | null>(null)
+  const [pendingGoalCreation, setPendingGoalCreation] = useState<{
+    title: string
+    trackingMode: 'missions_equal' | 'missions_weighted'
+    dateRange?: DateRange
+  } | null>(null)
   /** Missions to add when user presses Done (only when pendingGoalCreation is set). */
   const [pendingMissions, setPendingMissions] = useState<Array<{ id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }>>([])
   /** Goal currently being edited in the modal (separate from creation flow). */
@@ -373,9 +388,25 @@ export default function Goals() {
   const [activeTimer, setActiveTimer] = useState<{ goalId: string; startTime: number; elapsedSeconds: number } | null>(null)
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [stakeModalForGoalId, setStakeModalForGoalId] = useState<string | null>(null)
+  const [stakeModalForMissionId, setStakeModalForMissionId] = useState<string | null>(null)
   const [goalStakes, setGoalStakes] = useState<Record<string, StakeInfo>>({})
+  const [missionStakes, setMissionStakes] = useState<Record<string, StakeInfo>>({})
   const [chargeSuccessMessage, setChargeSuccessMessage] = useState<string | null>(null)
+  /** Which goal card is expanded (accordion). Single id or '__standalone__' or null. */
+  const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null)
+  /** When set, we're adding a mission to this goal (inline modal). */
+  const [addMissionForGoalId, setAddMissionForGoalId] = useState<string | null>(null)
+  /** Guard to prevent double-add when submitting new mission (e.g. double-click). */
+  const isAddingMissionRef = useRef(false)
+  /** Calendar modal shown after clicking Add Goal (date range for goal). */
+  const [showGoalCalendarModal, setShowGoalCalendarModal] = useState(false)
+  const [goalDateRange, setGoalDateRange] = useState<DateRange | undefined>(undefined)
   const { user, session } = useAuth()
+
+  // Reset calendar selection every time the modal is opened
+  useEffect(() => {
+    if (showGoalCalendarModal) setGoalDateRange(undefined)
+  }, [showGoalCalendarModal])
 
   const [addGoalTitleError, setAddGoalTitleError] = useState(false)
 
@@ -398,11 +429,18 @@ export default function Goals() {
     setNewGoalTitle('')
     setShowAddForm(false)
     const isMissionsMode = trackingMode === 'missions_equal' || trackingMode === 'missions_weighted'
+    const range =
+      goalDateRange?.from && goalDateRange?.to
+        ? { from: goalDateRange.from, to: goalDateRange.to }
+        : undefined
     if (isMissionsMode) {
-      setPendingGoalCreation({ title, trackingMode })
+      setPendingGoalCreation({ title, trackingMode, dateRange: goalDateRange })
     } else {
-      const newGoal = addGoalToContext(title, trackingMode)
-      if (newGoal) setJustAddedGoal(newGoal)
+      const newGoal = addGoalToContext(title, trackingMode, range)
+      if (newGoal) {
+        setJustAddedGoal(newGoal)
+        persistGoalAndMissionsToSupabase(newGoal, []).catch((e) => console.error('[Goals] Persist goal failed:', e))
+      }
     }
   }
 
@@ -513,6 +551,34 @@ export default function Goals() {
     load()
   }, [user?.id])
 
+  // Load mission stakes from Supabase (item_type = 'mission')
+  useEffect(() => {
+    const client = supabase
+    if (!user?.id || !client) return
+    const load = async () => {
+      const { data: rows, error } = await client
+        .from('stakes')
+        .select('id, amount, currency, due_date, failure_mode, status, item_id')
+        .eq('user_id', user.id)
+        .eq('item_type', 'mission')
+      if (error) return
+      const map: Record<string, StakeInfo> = {}
+      for (const row of rows ?? []) {
+        const itemId = row.item_id as string
+        map[itemId] = {
+          stakeId: row.id as string,
+          amount: Number(row.amount),
+          currency: (row.currency as string) ?? 'usd',
+          dueDate: row.due_date ? new Date(row.due_date as string).toISOString().slice(0, 10) : '',
+          failureMode: (row.failure_mode as StakeInfo['failureMode']) ?? 'both',
+          status: (row.status as StakeInfo['status']) ?? 'pending_card',
+        }
+      }
+      setMissionStakes(map)
+    }
+    load()
+  }, [user?.id])
+
   const stakeFunctionUrl =
     (typeof import.meta.env.VITE_SUPABASE_URL === 'string' && import.meta.env.VITE_SUPABASE_URL
       ? import.meta.env.VITE_SUPABASE_URL.replace(/\/$/, '')
@@ -570,6 +636,218 @@ export default function Goals() {
     [goalStakes, stakeFunctionUrl, stakeToken],
   )
 
+  const handleMissionStakeAttached = useCallback((missionId: string, info: StakeInfo) => {
+    setMissionStakes((prev) => ({ ...prev, [missionId]: info }))
+  }, [])
+
+  const handleMissionStakeSuccess = useCallback(
+    async (missionId: string) => {
+      const stake = missionStakes[missionId]
+      if (!stake?.stakeId) return
+      try {
+        const res = await fetch(stakeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(stakeToken ? { Authorization: `Bearer ${stakeToken}` } : {}),
+          },
+          body: JSON.stringify({ action: 'succeed_stake', stakeId: stake.stakeId }),
+        })
+        if (res.ok) setMissionStakes((prev) => ({ ...prev, [missionId]: { ...stake, status: 'succeeded' } }))
+      } catch {
+        // keep UI consistent on network error
+      }
+    },
+    [missionStakes, stakeFunctionUrl, stakeToken],
+  )
+
+  const handleMissionStakeFailure = useCallback(
+    async (missionId: string) => {
+      const stake = missionStakes[missionId]
+      if (!stake?.stakeId) return
+      try {
+        const res = await fetch(stakeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(stakeToken ? { Authorization: `Bearer ${stakeToken}` } : {}),
+          },
+          body: JSON.stringify({ action: 'charge_stake', stakeId: stake.stakeId }),
+        })
+        if (res.ok) {
+          setMissionStakes((prev) => ({ ...prev, [missionId]: { ...stake, status: 'charged' } }))
+          const msg = `Charged ${stake.amount} ${(stake.currency || 'usd').toUpperCase()} from your card.`
+          setChargeSuccessMessage(msg)
+          setTimeout(() => setChargeSuccessMessage(null), 8000)
+        }
+      } catch {
+        // keep UI consistent on network error
+      }
+    },
+    [missionStakes, stakeFunctionUrl, stakeToken],
+  )
+
+  /** Toggle mission complete (from MyMissions logic: completedAt, orderInCategoryBeforeComplete). */
+  const handleMissionToggle = useCallback(
+    (missionId: string) => {
+      setMissions((prev) => {
+        const mission = prev.find((m) => m.id === missionId)
+        if (!mission) return prev
+
+        if (mission.isCompleted) {
+          const restoredOrder = mission.orderInCategoryBeforeComplete ?? 0
+          return prev.map((m) => {
+            if (m.id !== missionId) {
+              if (m.category === mission.category && (m.orderInCategory ?? 0) >= restoredOrder) {
+                return { ...m, orderInCategory: (m.orderInCategory ?? 0) + 1 }
+              }
+              if (m.repeatLocked && m.title === mission.title && m.category === mission.category) {
+                return { ...m, repeatCompletedCount: Math.max(0, (m.repeatCompletedCount ?? 0) - 1) }
+              }
+              return m
+            }
+            const { orderInCategoryBeforeComplete: _, ...rest } = m
+            return {
+              ...rest,
+              isCompleted: false,
+              completedAt: undefined,
+              orderInCategory: restoredOrder,
+              progressCount: m.targetCount ? 0 : m.progressCount,
+            }
+          })
+        }
+
+        const completedAt = new Date().toISOString()
+        const inCategory = prev.filter((m) => m.category === mission.category)
+        const maxOrder = Math.max(0, ...inCategory.map((m) => m.orderInCategory ?? 0))
+        const orderAtBottom = maxOrder + 1
+        const previousOrder = mission.orderInCategory ?? 0
+        const currentProgress = mission.progressCount ?? 0
+        const nextProgress = currentProgress + 1
+        const didCompleteCounter = !mission.targetCount || nextProgress >= (mission.targetCount ?? 0)
+
+        return prev.map((m) => {
+          if (m.id !== missionId) {
+            if (m.repeatLocked && m.title === mission.title && m.category === mission.category && didCompleteCounter) {
+              return { ...m, repeatCompletedCount: (m.repeatCompletedCount ?? 0) + 1 }
+            }
+            return m
+          }
+          if (!m.targetCount) {
+            return { ...m, isCompleted: true, completedAt, orderInCategory: orderAtBottom, orderInCategoryBeforeComplete: previousOrder }
+          }
+          const current = m.progressCount ?? 0
+          if (current >= m.targetCount) {
+            return { ...m, isCompleted: true, progressCount: m.targetCount, completedAt, orderInCategory: orderAtBottom, orderInCategoryBeforeComplete: previousOrder }
+          }
+          const next = current + 1
+          if (next >= m.targetCount) {
+            return { ...m, progressCount: next, isCompleted: true, completedAt, orderInCategory: orderAtBottom, orderInCategoryBeforeComplete: previousOrder }
+          }
+          return { ...m, progressCount: next }
+        })
+      })
+    },
+    [setMissions],
+  )
+
+  // Repeat engine: same logic as MyMissions (setMissions for recurrence)
+  useEffect(() => {
+    const getIntervalMs = (m: Mission): number | null => {
+      if (m.recurrence === 'none') return null
+      const value = m.repeatValue && m.repeatValue > 0 ? m.repeatValue : 1
+      const unit = m.repeatUnit ?? (m.recurrence === 'daily' ? 'days' : m.recurrence === 'weekly' ? 'weeks' : 'days')
+      const base = value * 60 * 1000
+      if (unit === 'minutes') return base
+      if (unit === 'hours') return base * 60
+      if (unit === 'days') return base * 60 * 24
+      if (unit === 'weeks') return base * 60 * 24 * 7
+      if (unit === 'months') return base * 60 * 24 * 30
+      return null
+    }
+    const runRepeatEngine = () => {
+      setMissions((prev) => {
+        const now = Date.now()
+        const updated: Mission[] = []
+        const repeatKey = (t: string, c: string) => `${t}\0${c}`
+        const hasExistingLocked = (title: string, category: string) =>
+          prev.some((x) => x.repeatLocked && x.title === title && x.category === category)
+        const lockedKeyAddedThisRun = new Set<string>()
+        const mergedCountByKey = new Map<string, number>()
+
+        for (const m of prev) {
+          if (m.recurrence === 'none') {
+            updated.push(m)
+            continue
+          }
+          const intervalMs = getIntervalMs(m)
+          if (!intervalMs) {
+            updated.push(m)
+            continue
+          }
+          const lastTs = m.repeatLastEvaluatedAt ? new Date(m.repeatLastEvaluatedAt).getTime() : new Date(m.createdAt).getTime()
+          if (now - lastTs < intervalMs) {
+            updated.push(m)
+            continue
+          }
+          const intervalsPassed = Math.floor((now - lastTs) / intervalMs)
+          const nextEval = new Date(lastTs + intervalsPassed * intervalMs).toISOString()
+          const key = repeatKey(m.title, m.category)
+
+          if (m.isCompleted && !m.repeatLocked) {
+            const alreadyHasLocked = hasExistingLocked(m.title, m.category) || lockedKeyAddedThisRun.has(key)
+            const newMission: Mission = {
+              ...m,
+              id: uuidv4(),
+              isCompleted: false,
+              completedAt: undefined,
+              createdAt: new Date().toISOString(),
+              missedRepeats: 0,
+              repeatLocked: false,
+              repeatLastEvaluatedAt: new Date().toISOString(),
+              progressCount: (m.targetCount != null && m.targetCount > 0) ? 0 : m.progressCount,
+            }
+            if (alreadyHasLocked) {
+              mergedCountByKey.set(key, (mergedCountByKey.get(key) ?? 0) + 1)
+              updated.push(newMission)
+            } else {
+              lockedKeyAddedThisRun.add(key)
+              const locked: Mission = {
+                ...m,
+                repeatLocked: true,
+                repeatLastEvaluatedAt: nextEval,
+                repeatCompletedCount: (m.repeatCompletedCount ?? 0) + 1,
+              }
+              updated.push(locked, newMission)
+            }
+          } else if (!m.isCompleted) {
+            updated.push({
+              ...m,
+              missedRepeats: (m.missedRepeats ?? 0) + intervalsPassed,
+              repeatLastEvaluatedAt: nextEval,
+              progressCount: (m.targetCount != null && m.targetCount > 0) ? 0 : (m.progressCount ?? 0),
+            })
+          } else {
+            const extra = mergedCountByKey.get(key) ?? 0
+            updated.push({
+              ...m,
+              repeatLastEvaluatedAt: nextEval,
+              repeatCompletedCount: (m.repeatCompletedCount ?? 0) + extra,
+            })
+          }
+        }
+        return updated
+      })
+    }
+    runRepeatEngine()
+    const t = setTimeout(runRepeatEngine, 1500)
+    const interval = setInterval(runRepeatEngine, 15000)
+    return () => {
+      clearInterval(interval)
+      clearTimeout(t)
+    }
+  }, [setMissions])
+
   const formGoal = pendingGoalCreation ?? justAddedGoal
   const isWeighted = formGoal?.trackingMode === 'missions_weighted'
   const categoryForGoal = justAddedGoal ? `${GOAL_FILTER_PREFIX}${justAddedGoal.id}` : ''
@@ -613,10 +891,6 @@ export default function Goals() {
       setNewMissionWeightPercent(0)
       setShowMissionDuration(false)
       setShowMissionTargetCount(false)
-      if (!andOpenNew) {
-        const listToAdd = [{ id: uuidv4(), title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight }, ...pendingMissions]
-        doneMissionsForGoal(listToAdd)
-      }
       return
     }
 
@@ -640,6 +914,8 @@ export default function Goals() {
       )
       setEditingMissionId(null)
     } else {
+      if (isAddingMissionRef.current) return
+      isAddingMissionRef.current = true
       const inCategory = missions.filter((m) => m.category === category)
       const nextOrder = inCategory.length === 0 ? 0 : Math.max(...inCategory.map((m) => m.orderInCategory ?? 0)) + 1
       const id = uuidv4()
@@ -661,6 +937,7 @@ export default function Goals() {
         ...prev,
       ])
       setSessionMissionIds((prev) => [...prev, id])
+      isAddingMissionRef.current = false
     }
 
     setNewMissionTitle('')
@@ -673,6 +950,64 @@ export default function Goals() {
     setShowMissionTargetCount(false)
     if (!andOpenNew) closeJustAdded()
   }
+
+  /** Open inline "Add mission" form for a goal card. */
+  const openAddMissionInCard = useCallback((goalId: string) => {
+    setAddMissionForGoalId(goalId)
+    setNewMissionTitle('')
+    setNewMissionRecurrence('none')
+    setNewMissionHours(0)
+    setNewMissionMinutes(30)
+    setNewMissionTargetCount(1)
+    setNewMissionWeightPercent(0)
+    setShowMissionDuration(false)
+    setShowMissionTargetCount(false)
+  }, [])
+
+  /** Submit new mission from inline "Add mission" in a goal card. */
+  const submitAddMissionInCard = useCallback(() => {
+    if (isAddingMissionRef.current) return
+    const goalId = addMissionForGoalId
+    if (!goalId) return
+    const goal = getGoalById(goalId)
+    if (!goal) return
+    const title = newMissionTitle.trim()
+    if (!title) return
+    isAddingMissionRef.current = true
+    const category = `${GOAL_FILTER_PREFIX}${goalId}`
+    const durationStr = showMissionDuration ? `${newMissionHours}h ${newMissionMinutes}m` : '0h 0m'
+    const weight = goal.trackingMode === 'missions_weighted' ? Math.min(100, Math.max(0, newMissionWeightPercent)) : undefined
+    const targetCount = showMissionTargetCount ? newMissionTargetCount : undefined
+    const inCategory = missions.filter((m) => m.category === category)
+    const nextOrder = inCategory.length === 0 ? 0 : Math.max(...inCategory.map((m) => m.orderInCategory ?? 0)) + 1
+    setMissions((prev) => [
+      {
+        id: uuidv4(),
+        title,
+        category,
+        recurrence: newMissionRecurrence,
+        duration: durationStr,
+        targetCount,
+        progressCount: targetCount ? 0 : undefined,
+        createdAt: new Date().toISOString(),
+        isCompleted: false,
+        orderInCategory: nextOrder,
+        goalId,
+        weightPercent: weight,
+      },
+      ...prev,
+    ])
+    setAddMissionForGoalId(null)
+    setNewMissionTitle('')
+    setNewMissionRecurrence('none')
+    setNewMissionHours(0)
+    setNewMissionMinutes(30)
+    setNewMissionTargetCount(1)
+    setNewMissionWeightPercent(0)
+    setShowMissionDuration(false)
+    setShowMissionTargetCount(false)
+    isAddingMissionRef.current = false
+  }, [addMissionForGoalId, getGoalById, newMissionTitle, newMissionRecurrence, newMissionHours, newMissionMinutes, showMissionDuration, newMissionTargetCount, newMissionWeightPercent, showMissionTargetCount, missions, setMissions])
 
   const loadMissionIntoForm = (mission: Mission | { id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }) => {
     setNewMissionTitle(mission.title)
@@ -689,17 +1024,108 @@ export default function Goals() {
     setEditingMissionId(mission.id)
   }
 
-  const doneMissionsForGoal = (missionsToAdd?: Array<{ id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }>) => {
-    const list = missionsToAdd ?? pendingMissions
+  /** Persist a new goal and its missions to Supabase immediately so they survive refresh. */
+  const persistGoalAndMissionsToSupabase = useCallback(
+    async (goal: Goal, missionList: Mission[]) => {
+      if (!supabase || !user?.id) return
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.warn('[Goals] No Supabase session, cannot persist (sign in required)')
+        toast.error('Not signed in — goal and missions not saved to cloud.')
+        return
+      }
+      const now = new Date().toISOString()
+      const goalRow = {
+        id: goal.id,
+        title: goal.title,
+        tracking_mode: goal.trackingMode ?? null,
+        progress_percent: goal.progressPercent ?? null,
+        target_hours: goal.targetHours ?? null,
+        logged_hours: goal.loggedHours ?? null,
+        time_label: goal.timeLabel ?? null,
+        target_count: goal.targetCount ?? null,
+        current_count: goal.currentCount ?? null,
+        milestone_label: goal.milestoneLabel ?? null,
+        deadline_from: goal.deadlineFrom ?? null,
+        deadline_to: goal.deadlineTo ?? null,
+        created_at: goal.createdAt ?? now,
+        updated_at: now,
+        user_id: user.id,
+      }
+      let goalErr = (await supabase.from('goals').upsert([goalRow], { onConflict: 'id' })).error
+      if (goalErr && /column.*does not exist|undefined column|deadline_from|deadline_to/i.test(goalErr.message)) {
+        const minimalRow: Record<string, unknown> = {
+          id: goal.id,
+          user_id: user.id,
+          title: goal.title,
+          tracking_mode: goal.trackingMode ?? null,
+          created_at: goal.createdAt ?? now,
+          updated_at: now,
+        }
+        const retry = await supabase.from('goals').upsert([minimalRow], { onConflict: 'id' })
+        goalErr = retry.error
+      }
+      if (goalErr) {
+        const msg = goalErr.message || String(goalErr)
+        console.error('[Goals] Failed to persist goal to Supabase:', goalErr.code, msg, goalErr, 'row:', goalRow)
+        toast.error(`Goal not saved: ${msg}`)
+        throw goalErr
+      }
+      const missionRows = missionList.map((m) => ({
+        id: m.id,
+        title: m.title,
+        category: m.category,
+        recurrence: m.recurrence === 'custom' ? 'none' : m.recurrence,
+        duration: m.duration ?? '',
+        target_count: m.targetCount ?? null,
+        progress_count: m.progressCount ?? null,
+        created_at: m.createdAt,
+        is_completed: m.isCompleted,
+        completed_at: m.completedAt ?? null,
+        order_in_category: m.orderInCategory ?? null,
+        goal_id: m.goalId ?? null,
+        weight_percent: m.weightPercent ?? null,
+        user_id: user.id,
+      }))
+      if (missionRows.length > 0) {
+        const { error: missionsErr } = await supabase.from('missions').upsert(missionRows, { onConflict: 'id' })
+        if (missionsErr) {
+          console.error('[Goals] Failed to persist missions to Supabase:', missionsErr)
+          toast.error('Failed to save missions to database. Check console for details.')
+          throw missionsErr
+        }
+      }
+    },
+    [user?.id, toast],
+  )
+
+  const doneMissionsForGoal = async (missionsToAdd?: Array<{ id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }>) => {
+    const title = newMissionTitle.trim()
+    let list = missionsToAdd ?? pendingMissions
+    if (title) {
+      const durationStr = showMissionDuration ? `${newMissionHours}h ${newMissionMinutes}m` : '0h 0m'
+      const weight = isWeighted ? Math.min(100, Math.max(0, newMissionWeightPercent)) : undefined
+      const targetCount = showMissionTargetCount ? newMissionTargetCount : undefined
+      list = [
+        { id: uuidv4(), title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight },
+        ...list,
+      ]
+    }
     const totalToCheck = list.reduce((s, m) => s + (m.weightPercent ?? 0), 0)
     if (isWeighted && totalToCheck < 100) {
       alert('There is not enough percentage. Total weight must equal 100%.')
       return
     }
-    const title = newMissionTitle.trim()
-    if (title) addMissionForGoal(false)
-    else if (pendingGoalCreation) {
-      const newGoal = addGoalToContext(pendingGoalCreation.title, pendingGoalCreation.trackingMode)
+    if (pendingGoalCreation) {
+      const range =
+        pendingGoalCreation.dateRange?.from && pendingGoalCreation.dateRange?.to
+          ? { from: pendingGoalCreation.dateRange.from, to: pendingGoalCreation.dateRange.to }
+          : undefined
+      const newGoal = addGoalToContext(
+        pendingGoalCreation.title,
+        pendingGoalCreation.trackingMode,
+        range,
+      )
       if (newGoal) {
         const category = `${GOAL_FILTER_PREFIX}${newGoal.id}`
         const newMissionEntries = list.map((pm, index) => ({
@@ -717,6 +1143,12 @@ export default function Goals() {
           weightPercent: pm.weightPercent,
         }))
         setMissions((prev) => [...newMissionEntries, ...prev])
+        try {
+          await persistGoalAndMissionsToSupabase(newGoal, newMissionEntries)
+        } catch (e) {
+          console.error('[Goals] Persist goal/missions failed:', e)
+          toast.error('Could not save to cloud. Try again or check your connection.')
+        }
       }
       setPendingGoalCreation(null)
       setPendingMissions([])
@@ -952,11 +1384,13 @@ export default function Goals() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
       {!justAddedGoal && (
-        <GlowButton
-          label="Create New Goal"
-          onClick={openAddForm}
-          className="mb-8 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 font-medium text-white hover:bg-blue-500 sm:w-auto sm:px-6"
-        />
+        <div className="mb-8 flex justify-end">
+          <GlowButton
+            label="Create New Goal"
+            onClick={openAddForm}
+            className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 font-medium text-white hover:bg-blue-500 px-6"
+          />
+        </div>
       )}
 
       {showAddForm && (
@@ -995,7 +1429,7 @@ export default function Goals() {
                   setNewGoalTitle(e.target.value)
                   if (addGoalTitleError) setAddGoalTitleError(false)
                 }}
-                onKeyDown={(e) => e.key === 'Enter' && addGoal()}
+                onKeyDown={(e) => e.key === 'Enter' && setShowGoalCalendarModal(true)}
                 placeholder=""
                 className={`w-full rounded-lg border bg-slate-800 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 ${
                   addGoalTitleError
@@ -1004,82 +1438,6 @@ export default function Goals() {
                 }`}
                 autoFocus
               />
-              <div className="space-y-3 rounded-lg border border-gray-800 bg-slate-900/70 p-3 text-left">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  How do you want to track this goal?
-                </p>
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => setTrackingMode(trackingMode === 'missions_weighted' ? 'missions_weighted' : 'missions_equal')}
-                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                      trackingMode === 'missions_equal' || trackingMode === 'missions_weighted'
-                        ? 'border-blue-500 bg-slate-800 text-white'
-                        : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">By missions</span>
-                    </div>
-                    <div className="mt-2 space-y-1 text-xs text-gray-400">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="missions-tracking"
-                          checked={trackingMode === 'missions_equal'}
-                          onChange={() => setTrackingMode('missions_equal')}
-                          className="h-3 w-3 accent-blue-500"
-                        />
-                        <span>All missions are equally important (each mission contributes the same %).</span>
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="missions-tracking"
-                          checked={trackingMode === 'missions_weighted'}
-                          onChange={() => setTrackingMode('missions_weighted')}
-                          className="h-3 w-3 accent-blue-500"
-                        />
-                        <span>Weight each mission differently (you decide each mission&apos;s importance).</span>
-                      </label>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setTrackingMode('time')}
-                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                      trackingMode === 'time'
-                        ? 'border-blue-500 bg-slate-800 text-white'
-                        : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">By time tracking</span>
-                    </div>
-                    <p className="mt-1 text-xs text-gray-400">
-                      Track how many hours you invest toward this goal.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setTrackingMode('count')}
-                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                      trackingMode === 'count'
-                        ? 'border-blue-500 bg-slate-800 text-white'
-                        : 'border-gray-700 bg-slate-900 text-gray-300 hover:border-blue-500/70 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">By Milestones</span>
-                    </div>
-                    <p className="mt-1 text-xs text-gray-400">
-                      Track progress toward a numeric target.
-                    </p>
-                  </button>
-                </div>
-              </div>
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -1090,12 +1448,98 @@ export default function Goals() {
                 </button>
                 <button
                   type="button"
-                  onClick={addGoal}
+                  onClick={() => setShowGoalCalendarModal(true)}
                   className="flex-1 rounded-lg bg-blue-600 py-2.5 font-medium text-white hover:bg-blue-500"
                 >
                   Add Goal
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Calendar modal — shown after clicking Add Goal */}
+      {showGoalCalendarModal && (
+        <div
+          className={modal.backdrop}
+          onClick={() => setShowGoalCalendarModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="goal-calendar-title"
+        >
+          <div
+            className="flex h-[440px] w-full max-w-[min(95vw,600px)] flex-col overflow-hidden rounded-xl border border-gray-800 bg-slate-900 shadow-2xl transition-all duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={modal.header}>
+              <h2 id="goal-calendar-title" className={modal.title}>
+                Select deadline
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowGoalCalendarModal(false)}
+                className={modal.closeBtn}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 w-full flex-col items-center overflow-auto scrollbar-hide px-4 pb-4">
+              <div className="rdp-root goal-date-range-picker w-fit shrink-0 rounded-lg border border-gray-800 bg-slate-900/80 p-3">
+                <Calendar
+                  mode="range"
+                  defaultMonth={goalDateRange?.from ?? new Date()}
+                  startMonth={(() => {
+                    const d = new Date()
+                    d.setDate(1)
+                    d.setHours(0, 0, 0, 0)
+                    return d
+                  })()}
+                  selected={goalDateRange}
+                  components={{ Chevron: GoalCalendarChevron }}
+                  onSelect={(range) => {
+                    const today = startOfDay(new Date())
+                    if (!range?.from) {
+                      setGoalDateRange(undefined)
+                      return
+                    }
+                    const selected = range.to
+                      ? (range.from.getTime() > range.to.getTime() ? range.from : range.to)
+                      : range.from
+                    if (startOfDay(selected).getTime() <= today.getTime()) return
+                    setGoalDateRange({ from: today, to: startOfDay(selected) })
+                  }}
+                  disabled={(date) => startOfDay(date).getTime() <= startOfDay(new Date()).getTime()}
+                  numberOfMonths={2}
+                  className="w-fit rounded-lg border-0"
+                />
+              </div>
+            </div>
+            <div className={`${modal.footer} border-t-0 mx-auto w-60`}>
+              <button
+                type="button"
+                onClick={() => setShowGoalCalendarModal(false)}
+                className={btn.secondary}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!(goalDateRange?.from && goalDateRange?.to)}
+                onClick={() => {
+                  if (!goalDateRange?.from || !goalDateRange?.to) return
+                  addGoal()
+                  setShowGoalCalendarModal(false)
+                }}
+                className={
+                  goalDateRange?.from && goalDateRange?.to
+                    ? btn.primary
+                    : 'rounded-lg px-4 py-2.5 text-sm font-medium text-gray-500 bg-gray-700 cursor-default transition-all duration-200'
+                }
+              >
+                Continue
+              </button>
             </div>
           </div>
         </div>
@@ -1152,7 +1596,7 @@ export default function Goals() {
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-xs text-gray-500">Make it repeated</p>
+                  <p className="text-xs text-gray-500">make it repeat until the deadline hits</p>
                   <div
                     className={`flex flex-wrap items-center gap-3 rounded-lg border bg-slate-800 px-3 py-2 ${
                       newMissionRecurrence !== 'none' ? 'border-emerald-500/60' : 'border-gray-700'
@@ -1164,9 +1608,9 @@ export default function Goals() {
                         checked={newMissionRecurrence !== 'none'}
                         onChange={(e) => setNewMissionRecurrence(e.target.checked ? 'daily' : 'none')}
                         className="h-4 w-4 accent-cyan-500"
-                        aria-label="Make it repeated"
+                        aria-label="make it repeat until the deadline hits"
                       />
-                      <span>{newMissionRecurrence !== 'none' ? 'Repeated' : 'Make it repeated'}</span>
+                      <span>{newMissionRecurrence !== 'none' ? 'Repeated' : 'make it repeat until the deadline hits'}</span>
                     </label>
                     {newMissionRecurrence !== 'none' && (
                       <div className="flex flex-wrap items-center gap-3">
@@ -1468,265 +1912,312 @@ export default function Goals() {
         </div>
       )}
 
-      <div className="flex flex-col items-center justify-center rounded-xl border border-gray-800 bg-slate-900/40 py-20 text-center text-gray-300">
+      <div className={`${pageContainer} w-full max-w-4xl`}>
+        {chargeSuccessMessage && (
+          <div className="rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            {chargeSuccessMessage}
+          </div>
+        )}
         {goals.length > 0 ? (
           <>
-            {chargeSuccessMessage && (
-              <div className="mb-4 rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-                {chargeSuccessMessage}
-              </div>
-            )}
-          <ul className="grid w-full grid-cols-1 gap-4 px-4 text-left sm:grid-cols-2">
+          <ul className="w-full space-y-3 px-4 text-left">
             {goals.map((goal) => {
               const progress = getGoalProgressFromMissions(goal, missions)
-              const goalMissions = missions
+              const goalMissionsAll = missions
                 .filter((m) => m.goalId === goal.id)
                 .sort((a, b) => (a.orderInCategory ?? 0) - (b.orderInCategory ?? 0))
-              const displayMissions = goalMissions.slice(0, 2)
+              const effectiveCompleted = (m: Mission) =>
+                m.recurrence !== 'none' && (m.targetCount ?? 0) > 1
+                  ? (m.progressCount ?? 0) >= (m.targetCount ?? 0)
+                  : m.isCompleted
+              /** Only active (incomplete) missions for display in the list. */
+              const goalMissions = goalMissionsAll.filter((m) => !effectiveCompleted(m))
+              const circ = 2 * Math.PI * 15
               return (
-              <li
-                key={goal.id}
-                className={`group relative flex min-h-[18rem] flex-col rounded-xl border transition hover:border-gray-600 ${
-                  successFlashGoalId === goal.id
-                    ? 'border-emerald-500/70 bg-emerald-500/10 shadow-lg shadow-emerald-500/20'
-                    : 'border-gray-700 bg-slate-900/70 shadow-lg shadow-black/20'
-                }`}
-              >
-                <div className="absolute inset-0 rounded-[inherit]">
-                  <GlowingEffect
-                    spread={40}
-                    glow
-                    disabled={false}
-                    proximity={64}
-                    inactiveZone={0.01}
-                    borderWidth={2}
-                  />
-                  <div className="relative z-10 flex flex-col flex-1 p-4">
-                  {/* Goal Header */}
-                  <div className="mb-3">
-                    <div className="mb-2 flex items-center gap-2">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800">
-                        <GoalIcon mode={goal.trackingMode} />
-                      </div>
-                      <h3 className="min-w-0 flex-1 text-lg font-semibold text-white">{goal.title}</h3>
-                    </div>
-                    
-                    {/* Progress Bar */}
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="font-medium text-gray-400">Progress</span>
-                      <span className="font-semibold tabular-nums text-cyan-400">
-                        {Math.round(Math.min(100, Math.max(0, progress)))}%
+                <li
+                  key={goal.id}
+                  className={`group relative rounded-xl border transition-colors ${
+                    expandedGoalId === goal.id
+                      ? 'border-cyan-500/30 bg-slate-900/70'
+                      : 'border-gray-800 bg-slate-900/50 hover:border-gray-700'
+                  } ${successFlashGoalId === goal.id ? 'border-emerald-500/70 bg-emerald-500/10' : ''}`}
+                >
+                  {/* HEADER ROW — תמיד מוצג, לחיץ לפתיחה/סגירה */}
+                  <div
+                    className="flex cursor-pointer items-center gap-3 px-4 py-3"
+                    onClick={() => setExpandedGoalId(expandedGoalId === goal.id ? null : goal.id)}
+                  >
+                    {/* Progress ring */}
+                    <div className="relative shrink-0">
+                      <svg width="40" height="40" viewBox="0 0 40 40" className="-rotate-90">
+                        <circle cx="20" cy="20" r="15" fill="none" stroke="#1e293b" strokeWidth="3" />
+                        <circle
+                          cx="20" cy="20" r="15"
+                          fill="none"
+                          stroke="#06b6d4"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeDasharray={circ}
+                          strokeDashoffset={circ - (Math.min(100, Math.max(0, progress)) / 100) * circ}
+                          className="transition-all duration-500"
+                        />
+                      </svg>
+                      <span className="absolute inset-0 flex items-center justify-center text-[9px] font-mono text-gray-400">
+                        {Math.round(progress)}%
                       </span>
                     </div>
-                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-700 dashboard-category-progress-track">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-[width] duration-300"
-                        style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-                      />
-                    </div>
-                    {/* Time tracking: logged display + Log Time / Start Timer */}
-                    {goal.trackingMode === 'time' && (
-                      <div className="mt-2 space-y-2">
-                        <p className="text-xs font-medium tabular-nums text-gray-300">
-                          {Math.min(999, Math.round((goal.loggedHours ?? 0) * 10) / 10)}h / {(goal.targetHours ?? 0)}h logged
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openLogTimeModal(goal.id)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-600 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-gray-200 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                          >
-                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <circle cx="12" cy="12" r="9" />
-                              <path strokeLinecap="round" d="M12 7v5l3 2" />
+
+                    {/* Goal title + meta */}
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
+                        {goalStakes[goal.id] != null && goalStakes[goal.id].status !== 'cancelled' && goalStakes[goal.id].status !== 'pending_card' && (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-400" aria-hidden>
+                            <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
+                            <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
+                            <path d="m2 16 6 6" />
+                            <circle cx="16" cy="9" r="2.9" />
+                            <circle cx="6" cy="5" r="3" />
+                          </svg>
+                        )}
+                        <span className="min-w-0 truncate">{goal.title}</span>
+                      </p>
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/60 px-2 py-0.5 text-xs text-gray-200">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden>
+                            <circle cx="12" cy="12" r="10" />
+                            <circle cx="12" cy="12" r="6" />
+                            <circle cx="12" cy="12" r="2" />
+                          </svg>
+                          {goalMissions.length} mission{goalMissions.length !== 1 ? 's' : ''}
+                        </span>
+                        {formatDeadlineRange(goal.deadlineFrom, goal.deadlineTo) && (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/60 px-2 py-0.5 text-xs text-gray-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden>
+                              <path d="M8 2v4" />
+                              <path d="M16 2v4" />
+                              <rect width="18" height="18" x="3" y="4" rx="2" />
+                              <path d="M3 10h18" />
                             </svg>
+                            {formatDeadlineRange(goal.deadlineFrom, goal.deadlineTo)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Stake badge / add stake */}
+                    <div onClick={(e) => e.stopPropagation()}>
+                      {goalStakes[goal.id] != null && goalStakes[goal.id].status !== 'cancelled' && goalStakes[goal.id].status !== 'pending_card' ? (
+                        <StakeBadge
+                          stake={goalStakes[goal.id]}
+                          onReportSuccess={() => handleGoalStakeSuccess(goal.id)}
+                          onReportFailure={() => handleGoalStakeFailure(goal.id)}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setStakeModalForGoalId(goal.id)}
+                          className="rounded-full border border-dashed border-gray-700 px-2 py-0.5 text-xs text-gray-500 hover:border-amber-500/50 hover:text-amber-400"
+                        >
+                          + Stake
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Chevron */}
+                    <svg
+                      className={`h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 ${expandedGoalId === goal.id ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+
+                  {/* EXPANDED CONTENT — מוצג רק כשהכרטיס פתוח */}
+                  {expandedGoalId === goal.id && (
+                    <div className="border-t border-gray-800 px-4 pb-4 pt-3">
+                      {goal.trackingMode === 'time' && (
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-gray-400 tabular-nums">
+                            {Math.round((goal.loggedHours ?? 0) * 10) / 10}h / {goal.targetHours ?? 0}h
+                          </span>
+                          <button type="button" onClick={() => openLogTimeModal(goal.id)} className={btn.outline}>
                             Log Time
                           </button>
                           {activeTimer?.goalId === goal.id ? (
-                            <button
-                              type="button"
-                              onClick={stopTimer}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-600/60 bg-amber-500/20 px-2.5 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/30 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                            >
-                              <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
-                                <rect x="6" y="6" width="12" height="12" rx="2" />
-                              </svg>
-                              Stop Timer ({formatTimerElapsed(activeTimer.elapsedSeconds)})
+                            <button type="button" onClick={stopTimer} className="rounded-lg border border-amber-600/60 bg-amber-500/20 px-2.5 py-1 text-xs text-amber-200">
+                              Stop ({formatTimerElapsed(activeTimer.elapsedSeconds)})
                             </button>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => startTimer(goal.id)}
-                              disabled={!!activeTimer}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-600 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-gray-200 hover:bg-slate-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                            >
-                              <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M8 5v14l11-7L8 5z" />
-                              </svg>
+                            <button type="button" onClick={() => startTimer(goal.id)} disabled={!!activeTimer} className={btn.secondary}>
                               Start Timer
                             </button>
                           )}
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Milestone/count: current vs target + Update count button */}
-                    {goal.trackingMode === 'count' && (
-                      <div className="mt-2 space-y-2">
-                        <p className="text-xs font-medium tabular-nums text-gray-300">
-                          {formatTargetCount(goal.currentCount ?? 0)} / {formatTargetCount(goal.targetCount ?? 1)}{' '}
-                          {(goal.milestoneLabel?.trim() || 'items')}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2">
+                      {goal.trackingMode === 'count' && (
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-gray-400">
+                            {formatTargetCount(goal.currentCount ?? 0)} / {formatTargetCount(goal.targetCount ?? 1)}
+                          </span>
                           {updateCountGoalId === goal.id ? (
                             <>
                               <input
                                 type="text"
-                                inputMode="numeric"
                                 value={updateCountInput}
-                                onChange={(e) => {
-                                  const v = e.target.value.replace(/[^\d.]/g, '')
-                                  const parts = v.split('.')
-                                  const sanitized = parts.length > 1 ? parts[0] + '.' + parts.slice(1).join('') : v
-                                  setUpdateCountInput(sanitized)
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveUpdateCount(goal.id)
-                                  if (e.key === 'Escape') {
-                                    setUpdateCountGoalId(null)
-                                    setUpdateCountInput('')
-                                  }
-                                }}
-                                className="w-24 rounded-lg border border-gray-600 bg-slate-800 px-2.5 py-1.5 text-xs text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
-                                autoFocus
+                                onChange={(e) => setUpdateCountInput(e.target.value.replace(/[^\d.]/g, ''))}
+                                onKeyDown={(e) => e.key === 'Enter' && saveUpdateCount(goal.id)}
+                                className="w-20 rounded-lg border border-gray-600 bg-slate-800 px-2 py-1 text-xs text-white"
                               />
-                              <button
-                                type="button"
-                                onClick={() => saveUpdateCount(goal.id)}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-600/60 bg-cyan-500/20 px-2.5 py-1.5 text-xs font-medium text-cyan-200 hover:bg-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setUpdateCountGoalId(null)
-                                  setUpdateCountInput('')
-                                }}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-600 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-gray-200 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                              >
-                                Cancel
-                              </button>
+                              <button type="button" onClick={() => saveUpdateCount(goal.id)} className={btn.primary}>Save</button>
+                              <button type="button" onClick={() => { setUpdateCountGoalId(null); setUpdateCountInput('') }} className={btn.secondary}>Cancel</button>
                             </>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => openUpdateCount(goal)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-600 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-gray-200 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                            >
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                              </svg>
-                              Update count
-                            </button>
+                            <button type="button" onClick={() => openUpdateCount(goal)} className={btn.secondary}>Update count</button>
                           )}
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
 
-                  {/* Missions List */}
-                  {goalMissions.length > 0 ? (
-                    <div className="space-y-2 border-t border-gray-800 pt-3">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                        Missions ({goalMissions.length})
-                      </h4>
-                      <ul className="space-y-1.5">
-                        {displayMissions.map((mission) => (
-                          <li
-                            key={mission.id}
-                            className="flex items-start gap-2 rounded-lg bg-slate-800/50 p-2 text-sm transition hover:bg-slate-800"
-                          >
-                            {/* Checkbox */}
-                            <div
-                              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 ${
-                                mission.isCompleted
-                                  ? 'border-emerald-500 bg-emerald-500'
-                                  : 'border-gray-600'
-                              }`}
+                      <ul className="space-y-1">
+                        {goalMissions.map((mission) => {
+                          const done = effectiveCompleted(mission)
+                          return (
+                            <li
+                              key={mission.id}
+                              className="flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-800/50"
                             >
-                              {mission.isCompleted && (
-                                <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                </svg>
+                              {mission.repeatLocked ? (
+                                <RefreshCcw className="h-4 w-4 shrink-0 text-cyan-300" />
+                              ) : mission.targetCount && mission.targetCount > 1 ? (
+                                <NeonCheckbox checked={done} onChange={() => handleMissionToggle(mission.id)} aria-label="Complete" className="shrink-0" />
+                              ) : (
+                                <NeonCheckbox checked={mission.isCompleted} onChange={() => handleMissionToggle(mission.id)} aria-label="Complete" className="shrink-0" />
                               )}
-                            </div>
-
-                            {/* Mission Title */}
-                            <span className={`min-w-0 flex-1 truncate ${mission.isCompleted ? 'text-gray-500 line-through' : 'text-gray-200'}`} title={mission.title}>
-                              {mission.title}
-                            </span>
-                          </li>
-                        ))}
+                              <span className={`flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm ${done ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
+                                {missionStakes[mission.id] != null && missionStakes[mission.id].status !== 'cancelled' && missionStakes[mission.id].status !== 'pending_card' && (
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-400" aria-hidden>
+                                    <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
+                                    <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
+                                    <path d="m2 16 6 6" />
+                                    <circle cx="16" cy="9" r="2.9" />
+                                    <circle cx="6" cy="5" r="3" />
+                                  </svg>
+                                )}
+                                <span className="min-w-0 truncate">{mission.title}</span>
+                              </span>
+                              <div className="shrink-0">
+                                {missionStakes[mission.id] != null && missionStakes[mission.id].status !== 'cancelled' && missionStakes[mission.id].status !== 'pending_card' ? (
+                                  <StakeBadge stake={missionStakes[mission.id]} onReportSuccess={() => handleMissionStakeSuccess(mission.id)} onReportFailure={() => handleMissionStakeFailure(mission.id)} />
+                                ) : !done ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setStakeModalForMissionId(mission.id)}
+                                    className="rounded-full border border-dashed border-gray-700 px-2 py-0.5 text-xs text-gray-500 hover:border-amber-500/50 hover:text-amber-400"
+                                  >
+                                    + Stake
+                                  </button>
+                                ) : null}
+                              </div>
+                            </li>
+                          )
+                        })}
                       </ul>
-                    </div>
-                  ) : (
-                    <div className="border-t border-gray-800 pt-3 text-center text-xs text-gray-500">
-                      No missions yet
+
+                      <button
+                        type="button"
+                        onClick={() => openAddMissionInCard(goal.id)}
+                        className="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-gray-700 px-3 py-2 text-sm text-gray-500 transition hover:border-cyan-500/50 hover:text-cyan-400"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add mission
+                      </button>
                     </div>
                   )}
 
-                  {/* Financial stake row */}
-                  <div className="mt-3 flex items-center border-t border-gray-800 pt-3">
-                    {goalStakes[goal.id] != null && goalStakes[goal.id].status !== 'cancelled' && goalStakes[goal.id].status !== 'pending_card' ? (
-                      <StakeBadge
-                        stake={goalStakes[goal.id]}
-                        onReportSuccess={() => handleGoalStakeSuccess(goal.id)}
-                        onReportFailure={() => handleGoalStakeFailure(goal.id)}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setStakeModalForGoalId(goal.id)}
-                        className="rounded-lg border border-dashed border-amber-500/60 px-2.5 py-1 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/10 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
-                        aria-label="Add financial stake"
-                      >
-                        💰 Add financial stake
-                      </button>
+                  <div className="absolute right-2 top-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100">
+                    <button type="button" onClick={() => startEditGoal(goal)} className={btn.iconEdit} aria-label="Edit goal">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setMissions((prev) => prev.filter((m) => m.goalId !== goal.id))
+                        deleteGoal(goal.id)
+                        if (supabase && user?.id) {
+                          const { error } = await supabase.from('missions').delete().eq('goal_id', goal.id)
+                          if (error) {
+                            console.error('[Goals] Failed to delete missions for goal:', error)
+                            toast.error('Goal removed here but some missions may still be in the database.')
+                          }
+                        }
+                      }}
+                      className={btn.iconDanger}
+                      aria-label="Delete goal"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" /><path d="M10 11v6M14 11v6" /></svg>
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+
+          {/* Standalone Missions card */}
+          {(() => {
+            const standaloneAll = missions.filter((m) => !m.goalId).sort((a, b) => (a.orderInCategory ?? 0) - (b.orderInCategory ?? 0))
+            const effectiveCompletedStandalone = (m: Mission) => (m.recurrence !== 'none' && (m.targetCount ?? 0) > 1 ? (m.progressCount ?? 0) >= (m.targetCount ?? 0) : m.isCompleted)
+            const standalone = standaloneAll.filter((m) => !effectiveCompletedStandalone(m))
+            if (standalone.length === 0) return null
+            const standExpanded = expandedGoalId === '__standalone__'
+            return (
+              <div className="mt-4 rounded-xl border border-gray-800 bg-slate-900/50 px-4 hover:border-gray-700">
+                <div className="p-4">
+                  <button type="button" onClick={() => setExpandedGoalId(standExpanded ? null : '__standalone__')} className="flex w-full items-center gap-3 text-left">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-lg">📋</div>
+                      <h3 className="flex-1 text-lg font-semibold text-white">Standalone Missions</h3>
+                      <svg className={`h-5 w-5 shrink-0 text-gray-400 transition-transform ${standExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {standExpanded && (
+                      <div className="mt-4 space-y-2 border-t border-gray-800 pt-4">
+                        {standalone.map((mission) => {
+                          const done = effectiveCompletedStandalone(mission)
+                          return (
+                            <li key={mission.id} className="flex items-center gap-2 rounded-lg border border-gray-800 bg-slate-800/50 px-3 py-2 list-none">
+                              <NeonCheckbox checked={mission.isCompleted} onChange={() => handleMissionToggle(mission.id)} className="shrink-0" />
+                              <span className={`flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm ${done ? 'text-gray-500 line-through' : 'text-white'}`}>
+                                {missionStakes[mission.id] != null && missionStakes[mission.id].status !== 'cancelled' && missionStakes[mission.id].status !== 'pending_card' && (
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-400" aria-hidden>
+                                    <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
+                                    <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
+                                    <path d="m2 16 6 6" />
+                                    <circle cx="16" cy="9" r="2.9" />
+                                    <circle cx="6" cy="5" r="3" />
+                                  </svg>
+                                )}
+                                <span className="min-w-0 truncate">{mission.title}</span>
+                              </span>
+                              {mission.recurrence !== 'none' && <span className="text-xs text-gray-400">{mission.recurrence}</span>}
+                              {missionStakes[mission.id] != null && missionStakes[mission.id].status !== 'cancelled' && missionStakes[mission.id].status !== 'pending_card' ? (
+                                <StakeBadge stake={missionStakes[mission.id]} onReportSuccess={() => handleMissionStakeSuccess(mission.id)} onReportFailure={() => handleMissionStakeFailure(mission.id)} />
+                              ) : (
+                                <button type="button" onClick={() => setStakeModalForMissionId(mission.id)} className="rounded border border-dashed border-amber-500/60 px-2 py-0.5 text-xs text-amber-400">+ Stake</button>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </div>
                     )}
                   </div>
                 </div>
-                </div>
-
-                {/* Edit & Delete Buttons (appear on hover) */}
-                <div className="absolute right-2 top-2 z-20 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                  <button
-                    type="button"
-                    onClick={() => startEditGoal(goal)}
-                    className={btn.iconEdit}
-                    aria-label="Edit goal"
-                  >
-                    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteGoal(goal.id)}
-                    className={btn.iconDanger}
-                    aria-label="Delete goal"
-                  >
-                    <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
-                      <path d="M10 11v6M14 11v6" />
-                    </svg>
-                  </button>
-                </div>
-              </li>
-            );
-            })}
-          </ul>
+              )
+            })()}
           </>
         ) : (
           <>
@@ -2065,11 +2556,14 @@ export default function Goals() {
       )}
       {stakeModalForGoalId && (() => {
         const g = goals.find((x) => x.id === stakeModalForGoalId)
+        const goalDeadline = g?.deadlineTo ?? g?.deadlineFrom
         return g ? (
           <StakeSetupModal
             itemId={g.id}
             itemTitle={g.title}
             itemType="goal"
+            defaultDueDate={goalDeadline}
+            deadlineLocked={!!goalDeadline}
             onClose={() => setStakeModalForGoalId(null)}
             onStaked={(info) => {
               handleGoalStakeAttached(g.id, info)
@@ -2077,6 +2571,80 @@ export default function Goals() {
             }}
           />
         ) : null
+      })()}
+      {stakeModalForMissionId && (() => {
+        const m = missions.find((x) => x.id === stakeModalForMissionId)
+        const missionGoal = m?.goalId ? getGoalById(m.goalId) : null
+        const missionDeadline = missionGoal?.deadlineTo ?? missionGoal?.deadlineFrom
+        return m ? (
+          <StakeSetupModal
+            itemId={m.id}
+            itemTitle={m.title}
+            itemType="mission"
+            defaultDueDate={missionDeadline}
+            deadlineLocked={!!missionDeadline}
+            onClose={() => setStakeModalForMissionId(null)}
+            onStaked={(info) => {
+              handleMissionStakeAttached(m.id, info)
+              setStakeModalForMissionId(null)
+            }}
+          />
+        ) : null
+      })()}
+      {addMissionForGoalId && (() => {
+        const goal = getGoalById(addMissionForGoalId)
+        if (!goal) return null
+        const isWeighted = goal.trackingMode === 'missions_weighted'
+        return (
+          <div className={modal.backdrop} onClick={() => setAddMissionForGoalId(null)} role="dialog" aria-modal="true">
+            <div className={modal.box} onClick={(e) => e.stopPropagation()}>
+              <div className={modal.header}>
+                <h2 className={modal.title}>Add mission to {goal.title}</h2>
+                <button type="button" onClick={() => setAddMissionForGoalId(null)} className={modal.closeBtn} aria-label="Close">×</button>
+              </div>
+              <div className={modal.body}>
+                <label className="block text-xs font-medium text-gray-400">Title</label>
+                <input type="text" value={newMissionTitle} onChange={(e) => setNewMissionTitle(e.target.value)} className={input.base} placeholder="Mission title" />
+                <div className="flex flex-wrap gap-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                    <input type="checkbox" checked={newMissionRecurrence !== 'none'} onChange={(e) => setNewMissionRecurrence(e.target.checked ? 'daily' : 'none')} className="h-4 w-4 accent-cyan-500" />
+                    Repeated
+                  </label>
+                  {newMissionRecurrence !== 'none' && (
+                    <>
+                      <label className="flex items-center gap-1 text-sm text-gray-300"><input type="radio" name="rec" checked={newMissionRecurrence === 'daily'} onChange={() => setNewMissionRecurrence('daily')} /> Daily</label>
+                      <label className="flex items-center gap-1 text-sm text-gray-300"><input type="radio" name="rec" checked={newMissionRecurrence === 'weekly'} onChange={() => setNewMissionRecurrence('weekly')} /> Weekly</label>
+                    </>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                    <input type="checkbox" checked={showMissionDuration} onChange={(e) => setShowMissionDuration(e.target.checked)} className="h-4 w-4 accent-cyan-500" />
+                    Duration
+                  </label>
+                  {showMissionDuration && (
+                    <>
+                      <DurationCombobox value={newMissionHours} onChange={setNewMissionHours} options={Array.from({ length: 24 }, (_, i) => i)} min={0} max={99} label="h" ariaLabel="Hours" />
+                      <DurationCombobox value={newMissionMinutes} onChange={setNewMissionMinutes} options={[0, 15, 30, 45]} min={0} max={59} label="m" ariaLabel="Minutes" />
+                    </>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                    <input type="checkbox" checked={showMissionTargetCount} onChange={(e) => setShowMissionTargetCount(e.target.checked)} className="h-4 w-4 accent-cyan-500" />
+                    Target count
+                  </label>
+                  {showMissionTargetCount && <input type="number" min={1} value={newMissionTargetCount} onChange={(e) => setNewMissionTargetCount(Math.max(1, Number(e.target.value) || 1))} className="w-20 rounded-lg border border-gray-600 bg-slate-800 px-2 py-1 text-sm text-white" />}
+                </div>
+                {isWeighted && <div><label className="block text-xs text-gray-400">Weight %</label><input type="number" min={0} max={100} value={newMissionWeightPercent} onChange={(e) => setNewMissionWeightPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} className="w-20 rounded-lg border border-gray-600 bg-slate-800 px-2 py-1 text-sm text-white" /></div>}
+              </div>
+              <div className={modal.footer}>
+                <button type="button" onClick={() => setAddMissionForGoalId(null)} className={btn.secondary}>Cancel</button>
+                <button type="button" onClick={submitAddMissionInCard} disabled={!newMissionTitle.trim()} className={btn.primary}>Add mission</button>
+              </div>
+            </div>
+          </div>
+        )
       })()}
     </div>
   )
