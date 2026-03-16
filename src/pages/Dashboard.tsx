@@ -1,7 +1,7 @@
 /**
- * Dashboard — Mission Flow
+ * Dashboard — owe it
  * Linear/Notion style: fixed layout, information at a glance.
- * No widget drag/editor. Three columns: Missions | Goals | Budget+Stakes
+ * No widget drag/editor. Three columns: Missions | Goals | Counters
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
@@ -10,10 +10,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useMissions } from '../contexts/MissionsContext'
 import { useGoals } from '../contexts/GoalsContext'
 import { useCurrency } from '../contexts/CurrencyContext'
-import { useBudget } from '../contexts/BudgetContext'
 import { supabase } from '../lib/supabase'
 import { getRandomQuoteForPage } from '../utils/quotes'
-import { computeSummary, spentByCategory, totalPlannedBudget, getMonthStartEnd } from '../components/budget/budgetUtils'
 import { OnboardingOverlay, shouldShowOnboarding } from '../components/OnboardingOverlay'
 import { useToast } from '../components/Toast'
 import { v4 as uuidv4 } from 'uuid'
@@ -78,7 +76,6 @@ export default function Dashboard() {
   const { missions, setMissions, isLoading: mLoad } = useMissions()
   const { goals, isLoading: gLoad } = useGoals()
   const { formatMoney } = useCurrency()
-  const { budgets, currentId } = useBudget()
   const { toast } = useToast()
 
   const [stakes, setStakes] = useState<ActiveStake[]>([])
@@ -107,7 +104,17 @@ export default function Dashboard() {
     })()
   }, [user?.id, missions, goals])
 
-  const stakedMIds = useMemo(() => { const m = new Map<string, number>(); for (const s of stakes) if (s.itemType === 'mission') m.set(s.itemId, s.amount); return m }, [stakes])
+  /** Only stakes whose mission or goal still exists (same as what Goals displays). */
+  const activeStakes = useMemo(
+    () =>
+      stakes.filter((s) =>
+        s.itemType === 'mission'
+          ? missions.some((m) => m.id === s.itemId)
+          : goals.some((g) => g.id === s.itemId),
+      ),
+    [stakes, missions, goals],
+  )
+  const stakedMIds = useMemo(() => { const m = new Map<string, number>(); for (const s of activeStakes) if (s.itemType === 'mission') m.set(s.itemId, s.amount); return m }, [activeStakes])
   const today = now.toISOString().slice(0, 10)
   /** Missions that are defined in Goals (standalone or goal exists). */
   const missionsInSync = useMemo(
@@ -130,12 +137,6 @@ export default function Dashboard() {
   const completedToday = useMemo(() => missionsInSync.filter((m) => m.completedAt?.slice(0, 10) === today).length, [missionsInSync, today])
   const activeMissions = useMemo(() => missionsInSync.filter((m) => !m.isCompleted), [missionsInSync])
   const goalList = useMemo(() => goals.map((g) => ({ ...g, pct: goalProgress(g, missionsInSync) })).sort((a, b) => b.pct - a.pct), [goals, missionsInSync])
-
-  const budgetSnap = useMemo(() => {
-    const cb = budgets.find((b) => b.id === currentId) ?? (() => { const { start, end } = getMonthStartEnd(now); return budgets.find((b) => b.startDate <= end && b.endDate >= start) })()
-    if (!cb) return null
-    return { summary: computeSummary(cb.transactions), planned: totalPlannedBudget(cb.categories), categories: cb.categories, transactions: cb.transactions }
-  }, [budgets, currentId, now])
 
   const handleToggle = useCallback((id: string) => {
     setMissions((prev) =>
@@ -285,14 +286,14 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {stakes.length > 0 && (
+          {activeStakes.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/5">
               <div className="flex items-center justify-between border-b border-amber-500/10 px-4 py-2.5">
                 <p className="text-sm font-semibold text-amber-300">Stakes</p>
-                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-300">{stakes.length}</span>
+                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-300">{activeStakes.length}</span>
               </div>
               <div className="divide-y divide-amber-500/10 px-2 py-1">
-                {stakes.slice(0, 4).map((s) => (
+                {activeStakes.slice(0, 4).map((s) => (
                   <div key={s.stakeId} className="flex items-center justify-between py-2 px-1">
                     <p className="max-w-[130px] truncate text-xs text-gray-300">{s.itemTitle}</p>
                     <div className="text-right">
@@ -331,63 +332,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Budget + counters */}
+        {/* Counters */}
         <div className="space-y-4">
-          <div className="overflow-hidden rounded-xl border border-gray-800 bg-slate-900/50">
-            <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-white">Budget</p>
-                <p className="text-xs text-gray-500">{now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
-              </div>
-              <Link to="/budget" className="text-xs text-gray-600 hover:text-white">Manage →</Link>
-            </div>
-            {!budgetSnap ? (
-              <p className="px-4 py-5 text-sm text-gray-500">No budget. <Link to="/budget" className="text-cyan-500 hover:underline">Set one up →</Link></p>
-            ) : (
-              <div className="p-4 space-y-4">
-                <div>
-                  <div className="flex items-baseline justify-between mb-1">
-                    <span className={`text-xl font-bold ${budgetSnap.summary.expensesTotal > budgetSnap.planned ? 'text-red-400' : 'text-white'}`}>{formatMoney(budgetSnap.summary.expensesTotal)}</span>
-                    <span className="text-xs text-gray-500">of {formatMoney(budgetSnap.planned)}</span>
-                  </div>
-                  {(() => {
-                    const over = budgetSnap.summary.expensesTotal > budgetSnap.planned
-                    const warning = !over && budgetSnap.summary.expensesTotal > budgetSnap.planned * 0.85
-                    const trackState = over ? 'over' : warning ? 'warning' : 'ok'
-                    return (
-                      <div className={`h-1.5 w-full overflow-hidden rounded-full bg-slate-700 dashboard-budget-progress-track dashboard-budget-progress-track--${trackState}`}>
-                        <div className={`h-full rounded-full transition-[width] duration-500 ${over ? 'bg-red-500' : warning ? 'bg-amber-400' : 'bg-emerald-500'}`}
-                          style={{ width: `${Math.min(100, budgetSnap.planned > 0 ? (budgetSnap.summary.expensesTotal / budgetSnap.planned) * 100 : 0)}%` }} />
-                      </div>
-                    )
-                  })()}
-                  <p className={`mt-1 text-xs font-medium ${budgetSnap.summary.expensesTotal <= budgetSnap.planned ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {budgetSnap.summary.expensesTotal <= budgetSnap.planned
-                      ? `${formatMoney(budgetSnap.planned - budgetSnap.summary.expensesTotal)} remaining`
-                      : `${formatMoney(budgetSnap.summary.expensesTotal - budgetSnap.planned)} over budget`}
-                  </p>
-                </div>
-                {budgetSnap.categories.filter((c) => c.name.toLowerCase() !== 'income' && c.budget > 0).slice(0, 5).map((cat) => {
-                  const s = spentByCategory(budgetSnap.transactions)
-                  const sp = s[cat.id] ?? 0
-                  const pct = cat.budget > 0 ? Math.min(100, (sp / cat.budget) * 100) : 0
-                  const over = sp > cat.budget
-                  return (
-                    <div key={cat.id}>
-                      <div className="flex items-center justify-between text-xs mb-0.5">
-                        <span className="text-gray-500">{cat.name}</span>
-                        <span className={over ? 'text-red-400' : 'text-gray-600'}>{formatMoney(sp)} / {formatMoney(cat.budget)}</span>
-                      </div>
-                      <div className="h-1 w-full overflow-hidden rounded-full bg-slate-700 dashboard-category-progress-track">
-                        <div className={`h-full rounded-full ${over ? 'bg-red-500' : 'bg-cyan-600'}`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-gray-800 bg-slate-900/50 px-4 py-3">
               <p className="text-xs text-gray-500">Active</p>

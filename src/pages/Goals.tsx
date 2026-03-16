@@ -9,6 +9,7 @@ import { Calendar } from '../components/ui/calendar'
 import { ArrowLeft, ArrowRight, RefreshCcw } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 import { supabase } from '../lib/supabase'
+import { toLocalDateString } from '../lib/utils'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { btn, input, modal, pageContainer } from '../styles/designSystem'
@@ -344,7 +345,7 @@ export default function Goals() {
     dateRange?: DateRange
   } | null>(null)
   /** Missions to add when user presses Done (only when pendingGoalCreation is set). */
-  const [pendingMissions, setPendingMissions] = useState<Array<{ id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }>>([])
+  const [pendingMissions, setPendingMissions] = useState<Array<{ id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number; deadline?: string }>>([])
   /** Goal currently being edited in the modal (separate from creation flow). */
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [showEditGoalModal, setShowEditGoalModal] = useState(false)
@@ -367,6 +368,7 @@ export default function Goals() {
   const [newMissionWeightPercent, setNewMissionWeightPercent] = useState(0)
   const [showMissionDuration, setShowMissionDuration] = useState(false)
   const [showMissionTargetCount, setShowMissionTargetCount] = useState(false)
+  const [newMissionDeadline, setNewMissionDeadline] = useState('')
   /** Mission IDs added in this session for the current goal (shown below the form). */
   const [sessionMissionIds, setSessionMissionIds] = useState<string[]>([])
   /** When set, form is editing this mission instead of adding new. */
@@ -472,6 +474,7 @@ export default function Goals() {
     setNewMissionMinutes(30)
     setNewMissionTargetCount(1)
     setNewMissionWeightPercent(0)
+    setNewMissionDeadline('')
     setSessionMissionIds([])
     setEditingMissionId(null)
   }
@@ -756,7 +759,7 @@ export default function Goals() {
     const getIntervalMs = (m: Mission): number | null => {
       if (m.recurrence === 'none') return null
       const value = m.repeatValue && m.repeatValue > 0 ? m.repeatValue : 1
-      const unit = m.repeatUnit ?? (m.recurrence === 'daily' ? 'days' : m.recurrence === 'weekly' ? 'weeks' : 'days')
+      const unit = m.repeatUnit ?? (m.recurrence === 'daily' ? 'days' : m.recurrence === 'weekly' ? 'weeks' : m.recurrence === 'monthly' ? 'months' : 'days')
       const base = value * 60 * 1000
       if (unit === 'minutes') return base
       if (unit === 'hours') return base * 60
@@ -851,6 +854,22 @@ export default function Goals() {
   const formGoal = pendingGoalCreation ?? justAddedGoal
   const isWeighted = formGoal?.trackingMode === 'missions_weighted'
   const categoryForGoal = justAddedGoal ? `${GOAL_FILTER_PREFIX}${justAddedGoal.id}` : ''
+
+  // Auto-select the goal's deadline as the mission deadline when the add-mission form is shown
+  const formGoalKey = formGoal ? ('id' in formGoal ? formGoal.id : 'pending') : null
+  useEffect(() => {
+    if (!formGoalKey || !formGoal) return
+    if (formGoal.trackingMode !== 'missions_equal' && formGoal.trackingMode !== 'missions_weighted') return
+    let dateStr = ''
+    if ('deadlineTo' in formGoal && formGoal.deadlineTo) dateStr = formGoal.deadlineTo
+    else if ('deadlineFrom' in formGoal && formGoal.deadlineFrom) dateStr = formGoal.deadlineFrom
+    else if ('dateRange' in formGoal && formGoal.dateRange) {
+      const r = formGoal.dateRange
+      dateStr = r.to ? toLocalDateString(r.to) : r.from ? toLocalDateString(r.from) : ''
+    }
+    if (dateStr) setNewMissionDeadline(dateStr)
+  }, [formGoalKey, formGoal])
+
   const missionsForThisGoal = missions.filter((m) => m.goalId === justAddedGoal?.id)
   const sessionMissionsFromContext = missionsForThisGoal.filter((m) => sessionMissionIds.includes(m.id))
   const sessionMissions = pendingGoalCreation ? pendingMissions : sessionMissionsFromContext
@@ -866,20 +885,21 @@ export default function Goals() {
     const durationStr = showMissionDuration ? `${newMissionHours}h ${newMissionMinutes}m` : '0h 0m'
     const weight = isWeighted ? Math.min(100, Math.max(0, newMissionWeightPercent)) : undefined
     const targetCount = showMissionTargetCount ? newMissionTargetCount : undefined
+    const deadline = newMissionDeadline.trim() || undefined
 
     if (pendingGoalCreation) {
       if (editingMissionId && pendingMissions.some((m) => m.id === editingMissionId)) {
         setPendingMissions((prev) =>
           prev.map((m) =>
             m.id === editingMissionId
-              ? { ...m, title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight }
+              ? { ...m, title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight, deadline }
               : m,
           ),
         )
         setEditingMissionId(null)
       } else {
         setPendingMissions((prev) => [
-          { id: uuidv4(), title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight },
+          { id: uuidv4(), title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight, deadline },
           ...prev,
         ])
       }
@@ -889,6 +909,7 @@ export default function Goals() {
       setNewMissionMinutes(30)
       setNewMissionTargetCount(1)
       setNewMissionWeightPercent(0)
+      setNewMissionDeadline('')
       setShowMissionDuration(false)
       setShowMissionTargetCount(false)
       return
@@ -908,6 +929,7 @@ export default function Goals() {
                 targetCount,
                 progressCount: m.progressCount ?? (targetCount ? 0 : undefined),
                 weightPercent: weight,
+                deadline,
               }
             : m,
         ),
@@ -933,6 +955,7 @@ export default function Goals() {
           orderInCategory: nextOrder,
           goalId: justAddedGoal.id,
           weightPercent: weight,
+          deadline,
         },
         ...prev,
       ])
@@ -946,6 +969,7 @@ export default function Goals() {
     setNewMissionMinutes(30)
     setNewMissionTargetCount(1)
     setNewMissionWeightPercent(0)
+    setNewMissionDeadline('')
     setShowMissionDuration(false)
     setShowMissionTargetCount(false)
     if (!andOpenNew) closeJustAdded()
@@ -953,6 +977,8 @@ export default function Goals() {
 
   /** Open inline "Add mission" form for a goal card. */
   const openAddMissionInCard = useCallback((goalId: string) => {
+    const goal = getGoalById(goalId)
+    const goalDeadline = goal?.deadlineTo ?? goal?.deadlineFrom ?? ''
     setAddMissionForGoalId(goalId)
     setNewMissionTitle('')
     setNewMissionRecurrence('none')
@@ -960,9 +986,10 @@ export default function Goals() {
     setNewMissionMinutes(30)
     setNewMissionTargetCount(1)
     setNewMissionWeightPercent(0)
+    setNewMissionDeadline(goalDeadline)
     setShowMissionDuration(false)
     setShowMissionTargetCount(false)
-  }, [])
+  }, [getGoalById])
 
   /** Submit new mission from inline "Add mission" in a goal card. */
   const submitAddMissionInCard = useCallback(() => {
@@ -1004,15 +1031,17 @@ export default function Goals() {
     setNewMissionMinutes(30)
     setNewMissionTargetCount(1)
     setNewMissionWeightPercent(0)
+    setNewMissionDeadline('')
     setShowMissionDuration(false)
     setShowMissionTargetCount(false)
     isAddingMissionRef.current = false
   }, [addMissionForGoalId, getGoalById, newMissionTitle, newMissionRecurrence, newMissionHours, newMissionMinutes, showMissionDuration, newMissionTargetCount, newMissionWeightPercent, showMissionTargetCount, missions, setMissions])
 
-  const loadMissionIntoForm = (mission: Mission | { id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }) => {
+  const loadMissionIntoForm = (mission: Mission | { id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number; deadline?: string }) => {
     setNewMissionTitle(mission.title)
     setNewMissionRecurrence(mission.recurrence)
     setNewMissionWeightPercent(mission.weightPercent ?? 0)
+    setNewMissionDeadline('deadline' in mission && mission.deadline ? mission.deadline : '')
     const match = mission.duration.match(/(\d+)h\s*(\d+)m/)
     const h = match ? parseInt(match[1], 10) : 0
     const m = match ? parseInt(match[2], 10) : 30
@@ -1099,7 +1128,7 @@ export default function Goals() {
     [user?.id, toast],
   )
 
-  const doneMissionsForGoal = async (missionsToAdd?: Array<{ id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number }>) => {
+  const doneMissionsForGoal = async (missionsToAdd?: Array<{ id: string; title: string; recurrence: Recurrence; duration: string; targetCount?: number; weightPercent?: number; deadline?: string }>) => {
     const title = newMissionTitle.trim()
     let list = missionsToAdd ?? pendingMissions
     if (title) {
@@ -1107,7 +1136,7 @@ export default function Goals() {
       const weight = isWeighted ? Math.min(100, Math.max(0, newMissionWeightPercent)) : undefined
       const targetCount = showMissionTargetCount ? newMissionTargetCount : undefined
       list = [
-        { id: uuidv4(), title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight },
+        { id: uuidv4(), title, recurrence: newMissionRecurrence, duration: durationStr, targetCount, weightPercent: weight, deadline: newMissionDeadline.trim() || undefined },
         ...list,
       ]
     }
@@ -1141,6 +1170,7 @@ export default function Goals() {
           orderInCategory: index,
           goalId: newGoal.id,
           weightPercent: pm.weightPercent,
+          deadline: pm.deadline,
         }))
         setMissions((prev) => [...newMissionEntries, ...prev])
         try {
@@ -1160,6 +1190,7 @@ export default function Goals() {
       setNewMissionWeightPercent(0)
       setShowMissionDuration(false)
       setShowMissionTargetCount(false)
+      setNewMissionDeadline('')
       setEditingMissionId(null)
       setSessionMissionIds([])
       setJustAddedGoal(null)
@@ -1634,6 +1665,16 @@ export default function Goals() {
                           />
                           Weekly
                         </label>
+                        <label className="flex items-center gap-2 text-sm text-gray-300">
+                          <input
+                            type="radio"
+                            name="goal-mission-recurrence"
+                            checked={newMissionRecurrence === 'monthly'}
+                            onChange={() => setNewMissionRecurrence('monthly')}
+                            className="h-3 w-3 accent-cyan-500"
+                          />
+                          Monthly
+                        </label>
                       </div>
                     )}
                   </div>
@@ -1717,6 +1758,18 @@ export default function Goals() {
                         />
                       )}
                     </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500">Mission deadline</p>
+                    <input
+                      type="date"
+                      value={newMissionDeadline}
+                      onChange={(e) => setNewMissionDeadline(e.target.value)}
+                      min={toLocalDateString(new Date())}
+                      className="w-full rounded-lg border border-gray-700 bg-slate-800 px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:border-cyan-500/50 focus:ring-cyan-500/30"
+                      aria-label="Mission deadline"
+                    />
                   </div>
 
                   {isWeighted && (
@@ -1806,7 +1859,7 @@ export default function Goals() {
                     disabled={!newMissionTitle.trim()}
                     className="rounded-lg border border-cyan-500/60 px-4 py-2.5 text-sm font-medium text-cyan-300 transition-all hover:bg-cyan-500/20 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
                   >
-                    {editingMissionId ? 'Update mission' : 'Add more mission'}
+                    {editingMissionId ? 'Update mission' : 'Add another mission'}
                   </button>
                   <button
                     type="button"
@@ -1944,12 +1997,12 @@ export default function Goals() {
                 >
                   {/* HEADER ROW — תמיד מוצג, לחיץ לפתיחה/סגירה */}
                   <div
-                    className="flex cursor-pointer items-center gap-3 px-4 py-3"
+                    className="flex cursor-pointer items-center gap-4 px-5 py-5"
                     onClick={() => setExpandedGoalId(expandedGoalId === goal.id ? null : goal.id)}
                   >
                     {/* Progress ring */}
                     <div className="relative shrink-0">
-                      <svg width="40" height="40" viewBox="0 0 40 40" className="-rotate-90">
+                      <svg width="48" height="48" viewBox="0 0 40 40" className="-rotate-90">
                         <circle cx="20" cy="20" r="15" fill="none" stroke="#1e293b" strokeWidth="3" />
                         <circle
                           cx="20" cy="20" r="15"
@@ -1962,27 +2015,18 @@ export default function Goals() {
                           className="transition-all duration-500"
                         />
                       </svg>
-                      <span className="absolute inset-0 flex items-center justify-center text-[9px] font-mono text-gray-400">
+                      <span className="absolute inset-0 flex items-center justify-center text-xs font-mono text-gray-400">
                         {Math.round(progress)}%
                       </span>
                     </div>
 
                     {/* Goal title + meta */}
                     <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
-                        {goalStakes[goal.id] != null && goalStakes[goal.id].status !== 'cancelled' && goalStakes[goal.id].status !== 'pending_card' && (
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-400" aria-hidden>
-                            <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
-                            <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
-                            <path d="m2 16 6 6" />
-                            <circle cx="16" cy="9" r="2.9" />
-                            <circle cx="6" cy="5" r="3" />
-                          </svg>
-                        )}
+                      <p className="flex items-center gap-1.5 truncate text-base font-semibold text-white">
                         <span className="min-w-0 truncate">{goal.title}</span>
                       </p>
-                      <span className="inline-flex flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/60 px-2 py-0.5 text-xs text-gray-200">
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/60 px-2.5 py-1 text-sm text-gray-200">
                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden>
                             <circle cx="12" cy="12" r="10" />
                             <circle cx="12" cy="12" r="6" />
@@ -1991,7 +2035,7 @@ export default function Goals() {
                           {goalMissions.length} mission{goalMissions.length !== 1 ? 's' : ''}
                         </span>
                         {formatDeadlineRange(goal.deadlineFrom, goal.deadlineTo) && (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/60 px-2 py-0.5 text-xs text-gray-200">
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/60 px-2.5 py-1 text-sm text-gray-200">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden>
                               <path d="M8 2v4" />
                               <path d="M16 2v4" />
@@ -2016,7 +2060,7 @@ export default function Goals() {
                         <button
                           type="button"
                           onClick={() => setStakeModalForGoalId(goal.id)}
-                          className="rounded-full border border-dashed border-gray-700 px-2 py-0.5 text-xs text-gray-500 hover:border-amber-500/50 hover:text-amber-400"
+                          className="rounded-full border border-dashed border-gray-700 px-2.5 py-1 text-sm text-gray-500 hover:border-amber-500/50 hover:text-amber-400"
                         >
                           + Stake
                         </button>
@@ -2025,7 +2069,7 @@ export default function Goals() {
 
                     {/* Chevron */}
                     <svg
-                      className={`h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 ${expandedGoalId === goal.id ? 'rotate-180' : ''}`}
+                      className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 ${expandedGoalId === goal.id ? 'rotate-180' : ''}`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -2097,15 +2141,6 @@ export default function Goals() {
                                 <NeonCheckbox checked={mission.isCompleted} onChange={() => handleMissionToggle(mission.id)} aria-label="Complete" className="shrink-0" />
                               )}
                               <span className={`flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm ${done ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
-                                {missionStakes[mission.id] != null && missionStakes[mission.id].status !== 'cancelled' && missionStakes[mission.id].status !== 'pending_card' && (
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-400" aria-hidden>
-                                    <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
-                                    <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
-                                    <path d="m2 16 6 6" />
-                                    <circle cx="16" cy="9" r="2.9" />
-                                    <circle cx="6" cy="5" r="3" />
-                                  </svg>
-                                )}
                                 <span className="min-w-0 truncate">{mission.title}</span>
                               </span>
                               <div className="shrink-0">
@@ -2192,15 +2227,6 @@ export default function Goals() {
                             <li key={mission.id} className="flex items-center gap-2 rounded-lg border border-gray-800 bg-slate-800/50 px-3 py-2 list-none">
                               <NeonCheckbox checked={mission.isCompleted} onChange={() => handleMissionToggle(mission.id)} className="shrink-0" />
                               <span className={`flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm ${done ? 'text-gray-500 line-through' : 'text-white'}`}>
-                                {missionStakes[mission.id] != null && missionStakes[mission.id].status !== 'cancelled' && missionStakes[mission.id].status !== 'pending_card' && (
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-400" aria-hidden>
-                                    <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
-                                    <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
-                                    <path d="m2 16 6 6" />
-                                    <circle cx="16" cy="9" r="2.9" />
-                                    <circle cx="6" cy="5" r="3" />
-                                  </svg>
-                                )}
                                 <span className="min-w-0 truncate">{mission.title}</span>
                               </span>
                               {mission.recurrence !== 'none' && <span className="text-xs text-gray-400">{mission.recurrence}</span>}
@@ -2575,7 +2601,7 @@ export default function Goals() {
       {stakeModalForMissionId && (() => {
         const m = missions.find((x) => x.id === stakeModalForMissionId)
         const missionGoal = m?.goalId ? getGoalById(m.goalId) : null
-        const missionDeadline = missionGoal?.deadlineTo ?? missionGoal?.deadlineFrom
+        const missionDeadline = m.deadline ?? missionGoal?.deadlineTo ?? missionGoal?.deadlineFrom
         return m ? (
           <StakeSetupModal
             itemId={m.id}
@@ -2591,61 +2617,311 @@ export default function Goals() {
           />
         ) : null
       })()}
-      {addMissionForGoalId && (() => {
-        const goal = getGoalById(addMissionForGoalId)
-        if (!goal) return null
-        const isWeighted = goal.trackingMode === 'missions_weighted'
-        return (
-          <div className={modal.backdrop} onClick={() => setAddMissionForGoalId(null)} role="dialog" aria-modal="true">
-            <div className={modal.box} onClick={(e) => e.stopPropagation()}>
-              <div className={modal.header}>
-                <h2 className={modal.title}>Add mission to {goal.title}</h2>
-                <button type="button" onClick={() => setAddMissionForGoalId(null)} className={modal.closeBtn} aria-label="Close">×</button>
-              </div>
-              <div className={modal.body}>
-                <label className="block text-xs font-medium text-gray-400">Title</label>
-                <input type="text" value={newMissionTitle} onChange={(e) => setNewMissionTitle(e.target.value)} className={input.base} placeholder="Mission title" />
-                <div className="flex flex-wrap gap-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
-                    <input type="checkbox" checked={newMissionRecurrence !== 'none'} onChange={(e) => setNewMissionRecurrence(e.target.checked ? 'daily' : 'none')} className="h-4 w-4 accent-cyan-500" />
-                    Repeated
-                  </label>
-                  {newMissionRecurrence !== 'none' && (
+      {addMissionForGoalId &&
+        (() => {
+          const goal = getGoalById(addMissionForGoalId)
+          if (!goal) return null
+          const isWeighted = goal.trackingMode === 'missions_weighted'
+
+          return (
+            <div
+              className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setAddMissionForGoalId(null)
+              }}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div
+                className="w-full max-w-md rounded-xl border border-gray-800 bg-slate-900 shadow-2xl transition-all duration-200"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+                  <p className="text-sm font-semibold text-white">
+                    {goal.trackingMode === 'missions_equal' || goal.trackingMode === 'missions_weighted'
+                      ? `Add missions for "${goal.title}"`
+                      : `Add mission to "${goal.title}"`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setAddMissionForGoalId(null)}
+                    className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="max-h-[80vh] overflow-y-auto space-y-4 px-4 py-3 text-left">
+                  {(goal.trackingMode === 'missions_equal' || goal.trackingMode === 'missions_weighted') && (
                     <>
-                      <label className="flex items-center gap-1 text-sm text-gray-300"><input type="radio" name="rec" checked={newMissionRecurrence === 'daily'} onChange={() => setNewMissionRecurrence('daily')} /> Daily</label>
-                      <label className="flex items-center gap-1 text-sm text-gray-300"><input type="radio" name="rec" checked={newMissionRecurrence === 'weekly'} onChange={() => setNewMissionRecurrence('weekly')} /> Weekly</label>
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-500">Define your mission</p>
+                        <input
+                          type="text"
+                          value={newMissionTitle}
+                          onChange={(e) => setNewMissionTitle(e.target.value)}
+                          placeholder=""
+                          autoFocus
+                          className={`w-full rounded-lg border bg-slate-800 px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 transition-colors ${
+                            newMissionTitle.trim()
+                              ? 'border-emerald-500/60 focus:border-emerald-500/60 focus:ring-emerald-500/25'
+                              : 'border-gray-700 focus:border-cyan-500/50 focus:ring-cyan-500/30'
+                          }`}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-500">make it repeat until the deadline hits</p>
+                        <div
+                          className={`flex flex-wrap items-center gap-3 rounded-lg border bg-slate-800 px-3 py-2 ${
+                            newMissionRecurrence !== 'none' ? 'border-emerald-500/60' : 'border-gray-700'
+                          }`}
+                        >
+                          <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={newMissionRecurrence !== 'none'}
+                              onChange={(e) => setNewMissionRecurrence(e.target.checked ? 'daily' : 'none')}
+                              className="h-4 w-4 accent-cyan-500"
+                              aria-label="make it repeat until the deadline hits"
+                            />
+                            <span>{newMissionRecurrence !== 'none' ? 'Repeated' : 'make it repeat until the deadline hits'}</span>
+                          </label>
+                          {newMissionRecurrence !== 'none' && (
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="flex items-center gap-2 text-sm text-gray-300">
+                                <input
+                                  type="radio"
+                                  name="goal-mission-recurrence-inline"
+                                  checked={newMissionRecurrence === 'daily'}
+                                  onChange={() => setNewMissionRecurrence('daily')}
+                                  className="h-3 w-3 accent-cyan-500"
+                                />
+                                Daily
+                              </label>
+                              <label className="flex items-center gap-2 text-sm text-gray-300">
+                                <input
+                                  type="radio"
+                                  name="goal-mission-recurrence-inline"
+                                  checked={newMissionRecurrence === 'weekly'}
+                                  onChange={() => setNewMissionRecurrence('weekly')}
+                                  className="h-3 w-3 accent-cyan-500"
+                                />
+                                Weekly
+                              </label>
+                              <label className="flex items-center gap-2 text-sm text-gray-300">
+                                <input
+                                  type="radio"
+                                  name="goal-mission-recurrence-inline"
+                                  checked={newMissionRecurrence === 'monthly'}
+                                  onChange={() => setNewMissionRecurrence('monthly')}
+                                  className="h-3 w-3 accent-cyan-500"
+                                />
+                                Monthly
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-500">How much time do you astamaite the mission to take?</p>
+                          <div
+                            className={`flex flex-wrap items-center gap-3 rounded-lg border bg-slate-800 px-3 py-2 ${
+                              showMissionDuration ? 'border-emerald-500/60' : 'border-gray-700'
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+                              <input
+                                type="checkbox"
+                                checked={showMissionDuration}
+                                onChange={(e) => setShowMissionDuration(e.target.checked)}
+                                className="h-4 w-4 accent-cyan-500"
+                                aria-label="Toggle duration"
+                              />
+                              <span>{showMissionDuration ? 'Duration' : 'Add duration'}</span>
+                            </label>
+                            {showMissionDuration && (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <DurationCombobox
+                                  value={newMissionHours}
+                                  onChange={setNewMissionHours}
+                                  options={Array.from({ length: 24 }, (_, i) => i)}
+                                  min={0}
+                                  max={99}
+                                  label="h"
+                                  ariaLabel="Hours"
+                                />
+                                <span className="text-gray-400">h</span>
+                                <DurationCombobox
+                                  value={newMissionMinutes}
+                                  onChange={setNewMissionMinutes}
+                                  options={[0, 15, 30, 45]}
+                                  min={0}
+                                  max={59}
+                                  label="m"
+                                  ariaLabel="Minutes"
+                                />
+                                <span className="text-gray-400">m</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-500">How much times do you need to do it untill your done?</p>
+                          <div
+                            className={`flex flex-wrap items-center gap-3 rounded-lg border bg-slate-800 px-3 py-2 ${
+                              showMissionTargetCount ? 'border-emerald-500/60' : 'border-gray-700'
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+                              <input
+                                type="checkbox"
+                                checked={showMissionTargetCount}
+                                onChange={(e) => setShowMissionTargetCount(e.target.checked)}
+                                className="h-4 w-4 accent-cyan-500"
+                                aria-label="Toggle target count"
+                              />
+                              <span>{showMissionTargetCount ? 'Target counter' : 'Add target counter'}</span>
+                            </label>
+                            {showMissionTargetCount && (
+                              <input
+                                type="number"
+                                min={1}
+                                value={newMissionTargetCount}
+                                onChange={(e) => setNewMissionTargetCount(Math.max(1, Number(e.target.value) || 1))}
+                                onFocus={(e) => (e.target as HTMLInputElement).select()}
+                                className="w-20 rounded-lg border bg-slate-800 px-2 py-1 text-center text-sm text-white focus:outline-none focus:ring-2 transition-colors border-gray-700 focus:border-cyan-500/50 focus:ring-cyan-500/30"
+                                aria-label="Target count"
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-500">Mission deadline</p>
+                          <input
+                            type="date"
+                            value={newMissionDeadline}
+                            onChange={(e) => setNewMissionDeadline(e.target.value)}
+                            min={toLocalDateString(new Date())}
+                            className="w-full rounded-lg border border-gray-700 bg-slate-800 px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:border-cyan-500/50 focus:ring-cyan-500/30"
+                            aria-label="Mission deadline"
+                          />
+                        </div>
+
+                        {isWeighted && (
+                          <div className="space-y-1">
+                            <p className="text-xs text-gray-500">Weight (% of goal) — total should be 100</p>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={newMissionWeightPercent}
+                              onChange={(e) =>
+                                setNewMissionWeightPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))
+                              }
+                              className="w-20 rounded-lg border border-gray-700 bg-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:border-cyan-500/50 focus:ring-cyan-500/30"
+                              placeholder="0–100"
+                              aria-label="Weight percent"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {sessionMissions.length > 0 && (
+                        <div className="space-y-3 border-t border-gray-800 pt-4 text-left">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                            Missions added this session
+                          </p>
+                          <ul className="space-y-2">
+                            {sessionMissions.map((m) => (
+                              <li
+                                key={m.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-700 bg-slate-800/60 px-3 py-2"
+                              >
+                                <span className="min-w-0 flex-1 truncate font-medium text-white" title={m.title}>
+                                  {m.title}
+                                </span>
+                                {isWeighted && (
+                                  <span className="text-sm tabular-nums text-gray-400">{m.weightPercent ?? 0}%</span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => loadMissionIntoForm(m)}
+                                  className="rounded bg-slate-700 px-2 py-1 text-xs font-medium text-gray-300 hover:bg-slate-600 hover:text-white"
+                                >
+                                  Edit
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                          {isWeighted && (
+                            <div className="space-y-1.5">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                Weight used (total 100%)
+                              </p>
+                              <div className="flex h-6 w-full overflow-hidden rounded-lg bg-slate-800">
+                                {sessionMissions.map((m, i) => {
+                                  const pct = m.weightPercent ?? 0
+                                  if (pct <= 0) return null
+                                  return (
+                                    <div
+                                      key={m.id}
+                                      className="shrink-0 border-r border-slate-900 last:border-r-0"
+                                      style={{
+                                        width: `${pct}%`,
+                                        minWidth: pct > 0 ? '4px' : 0,
+                                        backgroundColor: `hsl(${220 + i * 40}, 50%, 45%)`,
+                                      }}
+                                      title={`${m.title}: ${pct}%`}
+                                    />
+                                  )
+                                })}
+                                {freePercent > 0 && (
+                                  <div
+                                    className="min-w-0 flex-1 bg-slate-700/80"
+                                    style={{ width: `${freePercent}%` }}
+                                    title={`Free: ${freePercent}%`}
+                                  />
+                                )}
+                              </div>
+                              <div className="flex justify-between text-xs text-gray-500">
+                                <span>Used: {totalWeightUsed}%</span>
+                                <span>Free: {freePercent}%</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
-                    <input type="checkbox" checked={showMissionDuration} onChange={(e) => setShowMissionDuration(e.target.checked)} className="h-4 w-4 accent-cyan-500" />
-                    Duration
-                  </label>
-                  {showMissionDuration && (
-                    <>
-                      <DurationCombobox value={newMissionHours} onChange={setNewMissionHours} options={Array.from({ length: 24 }, (_, i) => i)} min={0} max={99} label="h" ariaLabel="Hours" />
-                      <DurationCombobox value={newMissionMinutes} onChange={setNewMissionMinutes} options={[0, 15, 30, 45]} min={0} max={59} label="m" ariaLabel="Minutes" />
-                    </>
-                  )}
+
+                <div className="flex items-center justify-end gap-3 border-t border-gray-800 px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setAddMissionForGoalId(null)}
+                    className="rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-400 transition-all hover:bg-slate-800 hover:text-white active:scale-[0.98]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitAddMissionInCard}
+                    disabled={!newMissionTitle.trim()}
+                    className="rounded-lg bg-cyan-600 px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-cyan-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    Add mission
+                  </button>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
-                    <input type="checkbox" checked={showMissionTargetCount} onChange={(e) => setShowMissionTargetCount(e.target.checked)} className="h-4 w-4 accent-cyan-500" />
-                    Target count
-                  </label>
-                  {showMissionTargetCount && <input type="number" min={1} value={newMissionTargetCount} onChange={(e) => setNewMissionTargetCount(Math.max(1, Number(e.target.value) || 1))} className="w-20 rounded-lg border border-gray-600 bg-slate-800 px-2 py-1 text-sm text-white" />}
-                </div>
-                {isWeighted && <div><label className="block text-xs text-gray-400">Weight %</label><input type="number" min={0} max={100} value={newMissionWeightPercent} onChange={(e) => setNewMissionWeightPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} className="w-20 rounded-lg border border-gray-600 bg-slate-800 px-2 py-1 text-sm text-white" /></div>}
-              </div>
-              <div className={modal.footer}>
-                <button type="button" onClick={() => setAddMissionForGoalId(null)} className={btn.secondary}>Cancel</button>
-                <button type="button" onClick={submitAddMissionInCard} disabled={!newMissionTitle.trim()} className={btn.primary}>Add mission</button>
               </div>
             </div>
-          </div>
-        )
-      })()}
+          )
+        })()}
     </div>
   )
 }

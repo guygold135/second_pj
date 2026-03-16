@@ -6,7 +6,6 @@ import { useMissions, GOAL_FILTER_PREFIX, type Mission } from '../contexts/Missi
 import { useGoals } from '../contexts/GoalsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { getCalendarCategoryColor } from '../lib/categoryColors'
 import { btn, input, modal } from '../styles/designSystem'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -100,7 +99,8 @@ type CalendarEvent = {
 }
 
 const STAKED_PILL_COLOR = '#c2410c'
-const GOAL_DEADLINE_PILL_COLOR = '#ea580c'
+const GOAL_DEADLINE_PILL_COLOR = '#c2410c'   /* reddish-orange */
+const MISSION_PILL_COLOR = '#eab308'          /* orangish-yellow */
 
 export default function CalendarPage() {
   const { missions, setMissions, categoriesOrder } = useMissions()
@@ -142,11 +142,15 @@ export default function CalendarPage() {
     () => missions.filter((m) => !m.goalId || goals.some((g) => g.id === m.goalId)),
     [missions, goals],
   )
+  /** Only show mission events whose id is still in current missions (avoids deleted missions still displaying). */
+  const missionIdsSet = useMemo(() => new Set(missions.map((m) => m.id)), [missions])
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>()
     for (const m of missionsInSync) {
-      if (!m.createdAt || m.isCompleted) continue
-      const key = m.createdAt.slice(0, 10)
+      if (!missionIdsSet.has(m.id) || !m.createdAt || m.isCompleted) continue
+      // Show mission on its deadline date when set, otherwise on creation date
+      const dateStr = m.deadline?.slice(0, 10) ?? m.createdAt.slice(0, 10)
+      const key = dateStr
       const list = map.get(key) ?? []
       const stake = stakesByItemId.get(m.id)
       const durationMin = parseDurationMinutes(m.duration) || DEFAULT_EVENT_DURATION_MINUTES
@@ -158,7 +162,7 @@ export default function CalendarPage() {
         hasStake: !!stake,
         stakeAmount: stake?.amount,
         stakeCurrency: stake?.currency,
-        startTimeHours: startTimeHoursFromIso(m.createdAt),
+        startTimeHours: m.deadline ? 0 : startTimeHoursFromIso(m.createdAt),
         durationMinutes: durationMin,
       })
       map.set(key, list)
@@ -183,7 +187,7 @@ export default function CalendarPage() {
       map.set(key, list)
     }
     return map
-  }, [missionsInSync, goals, stakesByItemId])
+  }, [missionsInSync, goals, stakesByItemId, missionIdsSet])
 
   const monthWeeks = useMemo(
     () => getMonthWeeks(current.getFullYear(), current.getMonth()),
@@ -194,7 +198,8 @@ export default function CalendarPage() {
   const getEvents = useCallback(
     (d: Date | null): CalendarEvent[] => {
       if (!d) return []
-      return eventsByDate.get(toDateKey(d)) ?? []
+      const list = eventsByDate.get(toDateKey(d)) ?? []
+      return [...list].sort((a, b) => (a.type === 'goal' && b.type !== 'goal' ? -1 : b.type === 'goal' && a.type !== 'goal' ? 1 : 0))
     },
     [eventsByDate]
   )
@@ -536,7 +541,7 @@ function WeekDayColumn({
         const heightPx = Math.max(MIN_EVENT_HEIGHT_PX, (durationMin / 60) * HOUR_ROW_HEIGHT)
         const isGoal = ev.type === 'goal'
         const hasStake = ev.hasStake === true
-        const bgColor = hasStake ? STAKED_PILL_COLOR : isGoal ? GOAL_DEADLINE_PILL_COLOR : getCalendarCategoryColor(ev.category)
+        const bgColor = hasStake ? STAKED_PILL_COLOR : isGoal ? GOAL_DEADLINE_PILL_COLOR : MISSION_PILL_COLOR
         const label = isGoal ? `${ev.title} · deadline` : ev.title
         const showStakeAmount = hasStake && ev.stakeAmount != null
         return (
@@ -553,18 +558,17 @@ function WeekDayColumn({
             }}
             title={showStakeAmount ? `${label} — ${ev.stakeAmount} ${ev.stakeCurrency ?? ''}` : label}
           >
-            {hasStake && (
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-white/90" aria-hidden>
-                <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
-                <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
-                <path d="m2 16 6 6" />
-                <circle cx="16" cy="9" r="2.9" />
-                <circle cx="6" cy="5" r="3" />
-              </svg>
-            )}
             <span className="min-w-0 truncate">{label}</span>
             {showStakeAmount && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/60 px-1.5 py-0.5 text-[10px] text-gray-200">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/50 bg-amber-500/20 px-2.5 py-1 text-xs font-medium text-amber-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden>
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                  <path d="M8.487 21h7.026a4 4 0 0 0 3.808 -5.224l-1.706 -5.306a5 5 0 0 0 -4.76 -3.47h-1.71a5 5 0 0 0 -4.76 3.47l-1.706 5.306a4 4 0 0 0 3.808 5.224" />
+                  <path d="M15 3q -1 4 -3 4t -3 -4l6 0" />
+                  <path d="M14 11h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5" />
+                  <path d="M12 10v1" />
+                  <path d="M12 17v1" />
+                </svg>
                 {ev.stakeAmount} {ev.stakeCurrency ?? 'USD'}
               </span>
             )}
@@ -610,35 +614,35 @@ function DayCell({
         {events.map((ev) => {
           const isGoal = ev.type === 'goal'
           const hasStake = ev.hasStake === true
-          const bgColor = hasStake ? STAKED_PILL_COLOR : isGoal ? GOAL_DEADLINE_PILL_COLOR : getCalendarCategoryColor(ev.category)
+          const bgColor = hasStake ? STAKED_PILL_COLOR : isGoal ? GOAL_DEADLINE_PILL_COLOR : MISSION_PILL_COLOR
           const label = isGoal ? `${ev.title} · deadline` : ev.title
           const showStakeAmount = hasStake && ev.stakeAmount != null
           return (
-            <button
-              key={ev.id}
-              type="button"
-              data-event-pill
-              onClick={(e) => { e.stopPropagation() }}
-              className="flex w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-xs font-medium text-white transition-opacity duration-200 hover:opacity-90 min-w-0"
-              style={{ backgroundColor: bgColor }}
-              title={showStakeAmount ? `${label} — ${ev.stakeAmount} ${ev.stakeCurrency ?? ''}` : label}
-            >
-              {hasStake && (
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-white/90" aria-hidden>
-                  <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
-                  <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
-                  <path d="m2 16 6 6" />
-                  <circle cx="16" cy="9" r="2.9" />
-                  <circle cx="6" cy="5" r="3" />
-                </svg>
-              )}
-              <span className="min-w-0 truncate">{label}</span>
-              {showStakeAmount && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/60 px-1.5 py-0.5 text-[10px] text-gray-200">
-                  {ev.stakeAmount} {ev.stakeCurrency ?? 'USD'}
-                </span>
-              )}
-            </button>
+            <div key={ev.id} className="group flex min-w-0 items-stretch">
+              <button
+                type="button"
+                data-event-pill
+                onClick={(e) => { e.stopPropagation() }}
+                className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-xs font-medium text-white transition-opacity duration-200 hover:opacity-90"
+                style={{ backgroundColor: bgColor }}
+                title={showStakeAmount ? `${label} — ${ev.stakeAmount} ${ev.stakeCurrency ?? ''}` : label}
+              >
+                <span className="min-w-0 truncate">{label}</span>
+                {showStakeAmount && (
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/50 bg-amber-500/20 px-2.5 py-1 text-xs font-medium text-amber-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden>
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                      <path d="M8.487 21h7.026a4 4 0 0 0 3.808 -5.224l-1.706 -5.306a5 5 0 0 0 -4.76 -3.47h-1.71a5 5 0 0 0 -4.76 3.47l-1.706 5.306a4 4 0 0 0 3.808 5.224" />
+                      <path d="M15 3q -1 4 -3 4t -3 -4l6 0" />
+                      <path d="M14 11h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5" />
+                      <path d="M12 10v1" />
+                      <path d="M12 17v1" />
+                    </svg>
+                    {ev.stakeAmount} {ev.stakeCurrency ?? 'USD'}
+                  </span>
+                )}
+              </button>
+            </div>
           )
         })}
       </div>

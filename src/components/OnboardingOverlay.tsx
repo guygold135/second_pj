@@ -14,8 +14,8 @@ const STORAGE_KEY = 'mf_onboarding_done'
 const STEPS = [
   {
     emoji: '🎯',
-    title: 'Mission Flow works differently.',
-    body: "Most goal apps are just fancy to-do lists. You write it down, feel good for a day, and then forget it. Mission Flow doesn't let you do that.",
+    title: 'owe it works differently.',
+    body: "Most goal apps are just fancy to-do lists. You write it down, feel good for a day, and then forget it. owe it doesn't let you do that.",
     highlight: 'You put real money on the line.',
     accent: 'text-cyan-400',
     border: 'border-cyan-500/30',
@@ -71,7 +71,7 @@ export function OnboardingOverlay({ onDone }: Props) {
       className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}
       role="dialog"
       aria-modal="true"
-      aria-label="Welcome to Mission Flow"
+      aria-label="Welcome to owe it"
     >
       <div
         className={`w-full max-w-md rounded-2xl border border-gray-800 bg-slate-900 shadow-2xl transition-all duration-300 ${visible ? 'scale-100' : 'scale-95'}`}

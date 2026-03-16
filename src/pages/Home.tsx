@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { btn } from '../styles/designSystem'
 
 /**
- * Home — Landing page for Mission Flow.
+ * Home — Landing page for owe it.
  *
  * Tone: Direct, personal, challenging. Speaks to ONE person who keeps
  * breaking promises to themselves. No fake social proof, no team messaging.
@@ -70,7 +70,7 @@ export default function Home() {
           </h1>
 
           <p className="mx-auto mb-8 max-w-xl text-lg leading-relaxed text-gray-400">
-            Mission Flow isn't another to-do list. It's a commitment engine that makes
+            owe it isn't another to-do list. It's a commitment engine that makes
             breaking your promises to yourself cost real money — and makes keeping them
             feel earned.
           </p>
@@ -174,7 +174,7 @@ export default function Home() {
               Every overspend shown as what it actually costs you — in 10 years.
             </h3>
             <p className="mb-6 text-gray-400">
-              Spent ₪500 more than budgeted this month? Mission Flow tells you what
+              Spent ₪500 more than budgeted this month? owe it tells you what
               that would have grown to if you'd invested it instead — based on your
               personal investment profile. It makes impulse spending concrete.
             </p>
@@ -265,8 +265,8 @@ export default function Home() {
       <footer className="border-t border-gray-800 bg-slate-950 px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-5xl flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <span className="text-base font-semibold tracking-wide text-white">Mission Flow</span>
-            <p className="mt-1 text-xs text-gray-600">© 2026 Mission Flow. All rights reserved.</p>
+            <span className="text-base font-semibold tracking-wide text-white">owe it</span>
+            <p className="mt-1 text-xs text-gray-600">© 2026 owe it. All rights reserved.</p>
           </div>
           <div className="flex gap-6 text-sm text-gray-500">
             <a href="#features" className="transition-colors hover:text-white">How it works</a>

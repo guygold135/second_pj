@@ -1,8 +1,7 @@
 @import "tailwindcss";
-@import "react-day-picker/style.css";
 
 /*
-  Global styles and design tokens for Mission Flow.
+  Global styles and design tokens for owe it.
   Tailwind provides utility classes; this file sets base theme and animations.
 */
 
@@ -146,42 +145,6 @@ button .mission-progress-check,
 }
 [data-theme="light"] .mission-category-divider {
   background-color: #475569 !important; /* slate-600, visible on light bg */
-}
-
-/* Dashboard category progress bar: in light mode always outline + white inside (empty or partially filled) */
-[data-theme="light"] .dashboard-category-progress-track {
-  background-color: #fff !important;
-  border: 1px solid var(--border);
-  box-sizing: border-box;
-}
-
-/* Dashboard main budget progress bar: in light mode outline + white inside; outline color matches fill */
-[data-theme="light"] .dashboard-budget-progress-track {
-  background-color: #fff !important;
-  box-sizing: border-box;
-}
-[data-theme="light"] .dashboard-budget-progress-track--ok {
-  border: 1px solid rgb(16 185 129); /* emerald-500 */
-}
-[data-theme="light"] .dashboard-budget-progress-track--warning {
-  border: 1px solid rgb(251 191 36); /* amber-400 */
-}
-[data-theme="light"] .dashboard-budget-progress-track--over {
-  border: 1px solid rgb(239 68 68); /* red-500 */
-}
-
-/* CategoryCard progress bar: in light mode outline + white inside */
-[data-theme="light"] .category-card-progress-track {
-  background-color: #fff !important;
-  border: 1px solid var(--border);
-  box-sizing: border-box;
-}
-
-/* BudgetSummaryCards progress bar: in light mode outline + white inside, orange outline to match amount color */
-[data-theme="light"] .budget-summary-progress-track {
-  background-color: #fff !important;
-  border: 1px solid rgb(249 115 22); /* orange-500 */
-  box-sizing: border-box;
 }
 
 /* ProgressRing (Dashboard goals): track = empty with outline; completed arc = green */

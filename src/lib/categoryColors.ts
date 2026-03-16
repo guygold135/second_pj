@@ -1,6 +1,6 @@
 /**
  * Category colors for calendar event chips (missions and goals).
- * Uses the same palette as budget categoryColors for consistency.
+ * Shared palette for category colors (e.g. goals/missions).
  */
 
 const CATEGORY_TO_HEX: Record<string, string> = {

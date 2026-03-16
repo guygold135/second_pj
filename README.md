@@ -1,6 +1,6 @@
-# Mission Flow Dashboard
+# owe it Dashboard
 
-A React + TypeScript + Tailwind CSS recreation of the Mission Flow productivity and financial dashboard (originally built in Bubble). Responsive UI with a clean, modern font (DM Sans).
+A React + TypeScript + Tailwind CSS recreation of the owe it productivity and financial dashboard (originally built in Bubble). Responsive UI with a clean, modern font (DM Sans).
 
 ## Run locally
 

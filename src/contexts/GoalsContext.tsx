@@ -10,6 +10,7 @@ import {
   type SetStateAction,
 } from 'react'
 import { supabase } from '../lib/supabase'
+import { toLocalDateString } from '../lib/utils'
 import { useAuth } from './AuthContext'
 
 export type GoalTrackingMode = 'missions_equal' | 'missions_weighted' | 'time' | 'count'
@@ -239,8 +240,8 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         id: crypto.randomUUID?.() ?? `goal-${Date.now()}`,
         title: trimmed,
         trackingMode: trackingMode ?? 'missions_equal',
-        deadlineFrom: dateRange?.from?.toISOString?.()?.slice(0, 10),
-        deadlineTo: dateRange?.to?.toISOString?.()?.slice(0, 10),
+        deadlineFrom: dateRange?.from ? toLocalDateString(dateRange.from) : undefined,
+        deadlineTo: dateRange?.to ? toLocalDateString(dateRange.to) : undefined,
       }
       setGoals((prev) => [...prev, newGoal])
       return newGoal

@@ -6,7 +6,6 @@ import { loadingState } from './styles/designSystem'
 import { GoalsProvider } from './contexts/GoalsContext'
 import { MissionsProvider } from './contexts/MissionsContext'
 import { CurrencyProvider } from './contexts/CurrencyContext'
-import { BudgetProvider } from './contexts/BudgetContext'
 import { ToastProvider } from './components/Toast'
 import { EtherealShadow } from './components/ui/ethereal-shadow'
 import Layout from './components/Layout'
@@ -14,9 +13,9 @@ import PublicLayout from './components/PublicLayout'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import Goals from './pages/Goals'
-import Budget from './pages/Budget'
 import CalendarPage from './pages/CalendarPage'
 import Settings from './pages/Settings'
+import History from './pages/History'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import ResetPassword from './pages/ResetPassword'
@@ -38,11 +37,9 @@ function ProtectedLayout() {
     <CurrencyProvider>
       <GoalsProvider>
         <MissionsProvider>
-          <BudgetProvider>
-            <ToastProvider>
+          <ToastProvider>
               <Layout />
             </ToastProvider>
-          </BudgetProvider>
         </MissionsProvider>
       </GoalsProvider>
     </CurrencyProvider>
@@ -79,8 +76,8 @@ function AppRoutes() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="my-missions" element={<Navigate to="/goals" replace />} />
         <Route path="goals" element={<Goals />} />
-        <Route path="budget" element={<Budget />} />
         <Route path="calendar" element={<CalendarPage />} />
+        <Route path="history" element={<History />} />
         <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

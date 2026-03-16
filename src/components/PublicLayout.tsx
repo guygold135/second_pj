@@ -15,7 +15,7 @@ export default function PublicLayout() {
             to="/"
             className="font-semibold tracking-wide text-white transition-opacity hover:opacity-90"
           >
-            Mission Flow
+            owe it
           </Link>
           <nav className="flex flex-1 items-center justify-end gap-2 text-sm">
             <Link

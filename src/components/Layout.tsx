@@ -15,13 +15,12 @@ import {
   PopoverFooter,
 } from './ui/popover'
 import { Button } from './ui/button'
-import { User as UserIcon, Settings as SettingsIcon, LogOut } from 'lucide-react'
+import { User as UserIcon, Settings as SettingsIcon, LogOut, Clock3 } from 'lucide-react'
 
 const navLinks = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/goals', label: 'Goals' },
   { to: '/calendar', label: 'Calendar' },
-  { to: '/budget', label: 'Budget' },
 ]
 
 const mainLinks = navLinks
@@ -59,7 +58,7 @@ export default function Layout() {
               to="/dashboard"
               className="font-semibold tracking-wide text-white transition-opacity hover:opacity-90"
             >
-              Mission Flow
+              owe it
             </Link>
           </div>
           <nav className="flex flex-shrink-0 items-center gap-1 text-sm">
@@ -123,6 +122,15 @@ export default function Layout() {
                     >
                       <UserIcon className="mr-2 h-4 w-4" />
                       View dashboard
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => { setPopoverOpen(false); navigate('/history') }}
+                    >
+                      <Clock3 className="mr-2 h-4 w-4" />
+                      History
                     </Button>
                     <Button
                       variant="ghost"

@@ -59,7 +59,7 @@ export default function SignIn() {
       <div className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-12">
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-white">Mission Flow</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-white">owe it</h1>
             <p className="mt-2 text-sm text-gray-400">Reset your password</p>
           </div>
           <form onSubmit={handleForgotSubmit} className={`space-y-5 ${card} p-6`}>
@@ -108,7 +108,7 @@ export default function SignIn() {
     <div className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-12">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-white">Mission Flow</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white">owe it</h1>
           <p className="mt-2 text-sm text-gray-400">Sign in to your account</p>
         </div>
         <form onSubmit={handleSubmit} className={`space-y-5 ${card} p-6`}>

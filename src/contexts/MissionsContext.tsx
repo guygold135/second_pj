@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, type ReactNode,
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 
-export type Recurrence = 'none' | 'daily' | 'weekly' | 'custom'
+export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly' | 'custom'
 
 export interface Mission {
   id: string
@@ -28,6 +28,8 @@ export interface Mission {
   goalId?: string
   /** For goals with missions_weighted: this mission's share of the goal (0–100). Sum of all mission weights for a goal should be 100. */
   weightPercent?: number
+  /** Optional mission-specific deadline (ISO date string YYYY-MM-DD). */
+  deadline?: string
 }
 
 export const initialCategoryOrder = ['Work', 'Personal', 'Health', 'Study'] as const
@@ -74,6 +76,7 @@ function missionToRow(m: Mission) {
     repeat_locked: m.repeatLocked ?? null,
     repeat_last_evaluated_at: m.repeatLastEvaluatedAt ?? null,
     repeat_completed_count: m.repeatCompletedCount ?? null,
+    deadline: m.deadline ?? null,
   }
 }
 
@@ -121,6 +124,7 @@ function rowToMission(r: Record<string, unknown>): Mission {
     repeatLocked: r.repeat_locked != null ? Boolean(r.repeat_locked) : undefined,
     repeatLastEvaluatedAt: r.repeat_last_evaluated_at != null ? String(r.repeat_last_evaluated_at) : undefined,
     repeatCompletedCount: r.repeat_completed_count != null ? Number(r.repeat_completed_count) : undefined,
+    deadline: r.deadline != null ? String(r.deadline) : undefined,
   }
 }
 
@@ -218,7 +222,7 @@ export function MissionsProvider({ children }: { children: ReactNode }) {
             const { error: missionsError } = await client.from('missions').upsert(rows, { onConflict: 'id' })
             if (missionsError) {
               const msg = missionsError.message ?? String(missionsError)
-              if (/repeat_unit|repeat_value|missed_repeats|repeat_locked|repeat_last_evaluated_at|repeat_completed_count|column.*does not exist/i.test(msg)) {
+              if (/repeat_unit|repeat_value|missed_repeats|repeat_locked|repeat_last_evaluated_at|repeat_completed_count|deadline|column.*does not exist/i.test(msg)) {
                 const { error: fallbackError } = await client.from('missions').upsert(rowsBase, { onConflict: 'id' })
                 if (fallbackError) throw fallbackError
                 if (import.meta.env.DEV) {
